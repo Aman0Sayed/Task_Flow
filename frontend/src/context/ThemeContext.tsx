@@ -15,29 +15,57 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const user = useAppSelector((state) => state.auth.user);
-  const userId = user?.id || 'guest';
 
-  const [theme, setTheme] = useState<Theme>(() => {
-    const savedTheme = localStorage.getItem(`theme-${userId}`) as Theme;
-    return savedTheme || 'system';
-  });
+  const [theme, setThemeState] = useState<Theme>('system');
+  const [color, setColorState] = useState<Color>('Blue');
 
-  const [color, setColor] = useState<Color>(() => {
-    const savedColor = localStorage.getItem(`color-${userId}`) as Color;
-    return savedColor || 'Blue';
-  });
-
-  // Update theme when user changes
+  // Load from user preferences when user changes
   useEffect(() => {
-    const savedTheme = localStorage.getItem(`theme-${userId}`) as Theme;
-    if (savedTheme && savedTheme !== theme) {
-      setTheme(savedTheme);
+    if (user?.preferences) {
+      setThemeState(user.preferences.theme || 'system');
+      setColorState(user.preferences.color || 'Blue');
     }
-    const savedColor = localStorage.getItem(`color-${userId}`) as Color;
-    if (savedColor && savedColor !== color) {
-      setColor(savedColor);
+  }, [user]);
+
+  const setTheme = async (newTheme: Theme) => {
+    setThemeState(newTheme);
+    if (user) {
+      try {
+        const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+        const token = localStorage.getItem('token');
+        await fetch(`${BASE_URL}/api/users/preferences`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ theme: newTheme }),
+        });
+      } catch (error) {
+        console.error('Failed to save theme:', error);
+      }
     }
-  }, [userId]);
+  };
+
+  const setColor = async (newColor: Color) => {
+    setColorState(newColor);
+    if (user) {
+      try {
+        const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+        const token = localStorage.getItem('token');
+        await fetch(`${BASE_URL}/api/users/preferences`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ color: newColor }),
+        });
+      } catch (error) {
+        console.error('Failed to save color:', error);
+      }
+    }
+  };
 
   // Apply color
   useEffect(() => {
@@ -53,8 +81,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     Object.entries(colors).forEach(([shade, hex]) => {
       root.style.setProperty(`--primary-${shade}`, hex);
     });
-    localStorage.setItem(`color-${userId}`, color);
-  }, [color, userId]);
+  }, [color]);
 
   useEffect(() => {
     const root = window.document.documentElement;
@@ -71,7 +98,6 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
     root.classList.remove('light', 'dark');
     root.classList.add(theme);
-    localStorage.setItem(`theme-${userId}`, theme);
   }, [theme]);
 
   // Listen for system theme changes

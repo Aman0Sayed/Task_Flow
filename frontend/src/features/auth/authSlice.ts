@@ -5,6 +5,10 @@ interface User {
   id: string;
   name: string;
   email: string;
+  preferences?: {
+    theme: 'light' | 'dark' | 'system';
+    color: 'Blue' | 'Purple' | 'Green' | 'Red' | 'Orange';
+  };
 }
 
 interface AuthState {

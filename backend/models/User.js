@@ -34,8 +34,13 @@ const userSchema = new mongoose.Schema({
   preferences: {
     theme: {
       type: String,
-      enum: ['light', 'dark'],
-      default: 'light'
+      enum: ['light', 'dark', 'system'],
+      default: 'system'
+    },
+    color: {
+      type: String,
+      enum: ['Blue', 'Purple', 'Green', 'Red', 'Orange'],
+      default: 'Blue'
     },
     notifications: {
       email: { type: Boolean, default: true },

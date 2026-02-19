@@ -20,34 +20,27 @@ export default function Settings() {
 
   // Load user preferences on component mount
   useEffect(() => {
-    const loadUserPreferences = async () => {
-      try {
-        const userId = user?.id || 'guest';
-        // For now, we'll use localStorage, but this should be replaced with API call
-        const savedTheme = localStorage.getItem(`theme-${userId}`) || 'System';
-        const savedColor = localStorage.getItem(`color-${userId}`) || 'Blue';
-        setSelectedTheme(savedTheme);
-        setSelectedColor(savedColor);
-      } catch (error) {
-        console.error('Error loading user preferences:', error);
-      }
-    };
-
-    loadUserPreferences();
+    if (user?.preferences) {
+      setSelectedTheme(user.preferences.theme.charAt(0).toUpperCase() + user.preferences.theme.slice(1));
+      setSelectedColor(user.preferences.color);
+    }
   }, [user]);
 
   const saveAppearanceSettings = async () => {
     setLoading(true);
     try {
-      // Save to localStorage with user ID
-      const userId = user?.id || 'guest';
-      localStorage.setItem(`theme-${userId}`, selectedTheme);
-      localStorage.setItem(`color-${userId}`, selectedColor);
+      // Apply theme and color (now saves to backend automatically)
+      await setTheme(selectedTheme.toLowerCase() as 'light' | 'dark' | 'system');
+      await setColor(selectedColor as 'Blue' | 'Purple' | 'Green' | 'Red' | 'Orange');
       
-      // Apply theme
-      setTheme(selectedTheme.toLowerCase() as 'light' | 'dark' | 'system');
-      setColor(selectedColor as 'Blue' | 'Purple' | 'Green' | 'Red' | 'Orange');
-      
+      // Show success message
+      // You can add a toast notification here
+    } catch (error) {
+      console.error('Error saving appearance settings:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
       // Here you would make an API call to save to database
       // await api.saveUserPreferences({ theme: selectedTheme, color: selectedColor });
       

@@ -62,5 +62,42 @@ router.post('/avatar', protect, upload.single('avatar'), asyncHandler(async (req
   });
 }));
 
+// Update user preferences
+router.put('/preferences', protect, asyncHandler(async (req, res) => {
+  const { theme, color } = req.body;
+
+  const allowedThemes = ['light', 'dark', 'system'];
+  const allowedColors = ['Blue', 'Purple', 'Green', 'Red', 'Orange'];
+
+  if (theme && !allowedThemes.includes(theme)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid theme'
+    });
+  }
+
+  if (color && !allowedColors.includes(color)) {
+    return res.status(400).json({
+      success: false,
+      error: 'Invalid color'
+    });
+  }
+
+  const update = {};
+  if (theme !== undefined) update['preferences.theme'] = theme;
+  if (color !== undefined) update['preferences.color'] = color;
+
+  const user = await User.findByIdAndUpdate(
+    req.user.id,
+    update,
+    { new: true }
+  ).select('-password');
+
+  res.status(200).json({
+    success: true,
+    data: user
+  });
+}));
+
 module.exports = router;
 
