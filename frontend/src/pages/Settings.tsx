@@ -41,18 +41,6 @@ export default function Settings() {
       setLoading(false);
     }
   };
-      // Here you would make an API call to save to database
-      // await api.saveUserPreferences({ theme: selectedTheme, color: selectedColor });
-      
-      // Show success message (you might want to add a toast notification system)
-      // alert('Appearance settings saved successfully!');
-    } catch (error) {
-      console.error('Error saving appearance settings:', error);
-      alert('Failed to save settings. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
 
   return (
     <div className="animate-fade-in space-y-6">
