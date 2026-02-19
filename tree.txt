@@ -1,0 +1,29 @@
+Folder PATH listing for volume Acer
+Volume serial number is 5805-6FEF
+C:.
++---backend
+¦   +---config
+¦   +---controllers
+¦   +---middlewares
+¦   +---models
+¦   +---routes
+¦   +---utils
++---frontend
+    +---.bolt
+    +---src
+        +---app
+        +---components
+        ¦   +---auth
+        ¦   +---dashboard
+        ¦   +---kanban
+        ¦   +---layout
+        ¦   +---lib
+        ¦   +---modals
+        ¦   +---ui
+        +---context
+        +---data
+        +---features
+        ¦   +---auth
+        +---hooks
+        +---lib
+        +---pages
