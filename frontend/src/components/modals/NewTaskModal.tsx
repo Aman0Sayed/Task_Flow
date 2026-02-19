@@ -25,10 +25,7 @@ export default function NewTaskModal({ isOpen, onClose, onSubmit }: NewTaskModal
   useEffect(() => {
     if (user) {
       const token = localStorage.getItem('token');
-      const BASE_URL =
-        window.location.hostname === 'localhost'
-          ? 'http://localhost:5000'
-          : 'https://task-flow-backend-nowictqd0-aman0sayeds-projects.vercel.app';
+      const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
       fetch(`${BASE_URL}/api/projects`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       })

@@ -34,7 +34,7 @@ function App() {
     dispatch(initializeAuth());
     
     // Fetch MongoDB status
-    fetch('https://task-flow-backend-nowictqd0-aman0sayeds-projects.vercel.app/api/db-status')
+    fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/db-status`)
       .then(res => res.json())
       .then(data => setDbStatus(data.status))
       .catch(() => setDbStatus('error'));

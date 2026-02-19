@@ -19,10 +19,7 @@ export default function AddTeamMemberModal({ isOpen, onClose, onSuccess }: AddTe
     if (isOpen) {
       // Fetch users for dropdown
       const token = localStorage.getItem('token');
-      const BASE_URL =
-        window.location.hostname === 'localhost'
-          ? 'http://localhost:5000'
-          : 'https://task-flow-backend-nowictqd0-aman0sayeds-projects.vercel.app';
+      const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
       fetch(`${BASE_URL}/api/users`, {
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       })
@@ -40,10 +37,7 @@ export default function AddTeamMemberModal({ isOpen, onClose, onSuccess }: AddTe
     setLoading(true);
     setError(null);
     const token = localStorage.getItem('token');
-    const BASE_URL =
-      window.location.hostname === 'localhost'
-        ? 'http://localhost:5000'
-        : 'https://task-flow-backend-nowictqd0-aman0sayeds-projects.vercel.app';
+    const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
     try {
       // Assume current teamId is passed as prop or context, here use window.location or similar if needed
       const teamId = window.location.pathname.split('/').includes('team') ? null : null; // Replace with actual teamId logic

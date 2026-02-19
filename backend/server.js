@@ -38,7 +38,7 @@ app.use(express.urlencoded({ extended: true }));
 const allowedOrigins = [
   'https://opulent-winner-g4rj7ppxpqxvc9vpg-5173.app.github.dev',
   'http://localhost:5173',
-  'https://taskflow-aman.vercel.app'   // ✅ Production Frontend
+  'https://task-flow-eta-ten.vercel.app'   // ✅ Production Frontend
 ];
 
 app.use(cors({

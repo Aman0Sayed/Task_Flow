@@ -53,10 +53,7 @@ export default function EditProjectModal({ isOpen, project, onClose, onSubmit }:
     };
 
     const token = localStorage.getItem('token');
-    const BASE_URL =
-      window.location.hostname === 'localhost'
-        ? 'http://localhost:5000'
-        : 'https://task-flow-backend-nowictqd0-aman0sayeds-projects.vercel.app';
+    const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
     
     const res = await fetch(`${BASE_URL}/api/projects/${project._id || project.id}`, {
       method: 'PUT',

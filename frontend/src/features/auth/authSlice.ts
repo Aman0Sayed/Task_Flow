@@ -74,10 +74,7 @@ const initialState: AuthState = {
 };
 
 // For local development, use localhost. For production use the Vercel backend URL.
-const BASE_URL =
-  window.location.hostname === 'localhost'
-    ? 'http://localhost:5000'
-    : 'https://task-flow-backend-nowictqd0-aman0sayeds-projects.vercel.app';
+const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
 export const registerUser = createAsyncThunk<
   RegisterResponse,

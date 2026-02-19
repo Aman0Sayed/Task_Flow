@@ -56,10 +56,7 @@ export default function KanbanBoard() {
 
   useEffect(() => {
     const token = localStorage.getItem('token');
-    const BASE_URL =
-      window.location.hostname === 'localhost'
-        ? 'http://localhost:5000'
-        : 'https://task-flow-backend-nowictqd0-aman0sayeds-projects.vercel.app';
+    const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
     fetch(`${BASE_URL}/api/tasks`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
@@ -122,10 +119,7 @@ export default function KanbanBoard() {
     };
     const backendStatus = statusMap[newStatus] || newStatus;
     const token = localStorage.getItem('token');
-    const BASE_URL =
-      window.location.hostname === 'localhost'
-        ? 'http://localhost:5000'
-        : 'https://task-flow-backend-nowictqd0-aman0sayeds-projects.vercel.app';
+    const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
     // Update backend
     fetch(`${BASE_URL}/api/tasks/${taskId}`, {
       method: 'PUT',
@@ -146,10 +140,7 @@ export default function KanbanBoard() {
   // Add a new task and update the correct column
   const handleNewTask = async (taskData: any) => {
     const token = localStorage.getItem('token');
-    const BASE_URL =
-      window.location.hostname === 'localhost'
-        ? 'http://localhost:5000'
-        : 'https://task-flow-backend-nowictqd0-aman0sayeds-projects.vercel.app';
+    const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
     const res = await fetch(`${BASE_URL}/api/tasks`, {
       method: 'POST',
       headers: {

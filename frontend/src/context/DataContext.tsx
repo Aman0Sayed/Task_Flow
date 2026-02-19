@@ -43,9 +43,7 @@ export function DataProvider({ children }: DataProviderProps) {
   });
 
   const BASE_URL =
-    window.location.hostname === 'localhost'
-      ? 'http://localhost:5000'
-      : 'https://task-flow-backend-nowictqd0-aman0sayeds-projects.vercel.app';
+    import.meta.env.VITE_API_URL || 'http://localhost:5000';
 
   const fetchAllData = async () => {
     if (!token || !isAuthenticated) return;
