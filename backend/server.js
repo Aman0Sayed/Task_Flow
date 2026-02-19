@@ -46,7 +46,7 @@ app.use(cors({
     // Allow non-browser tools (Postman / curl)
     if (!origin) return callback(null, true);
 
-    if (allowedOrigins.includes(origin)) {
+    if (allowedOrigins.includes(origin) || origin.endsWith('.vercel.app')) {
       callback(null, true);
     } else {
       callback(new Error(`CORS blocked for origin: ${origin}`));
