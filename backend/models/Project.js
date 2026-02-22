@@ -40,6 +40,11 @@ const projectSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  tenantId: {
+    type: String,
+    required: true,
+    index: true
+  },
   team: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Team'

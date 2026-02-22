@@ -18,6 +18,11 @@ const activitySchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  tenantId: {
+    type: String,
+    required: true,
+    index: true
+  },
   project: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Project'

@@ -25,6 +25,11 @@ exports.protect = asyncHandler(async (req, res, next) => {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
     req.user = await User.findById(decoded.id);
+    
+    // Add tenantId to request for multitenancy
+    if (req.user) {
+      req.tenantId = req.user.tenantId;
+    }
 
     next();
   } catch (err) {

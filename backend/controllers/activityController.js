@@ -6,18 +6,14 @@ const ErrorResponse = require('../utils/errorResponse');
 
 // Get all activities for user's projects
 exports.getActivities = asyncHandler(async (req, res, next) => {
-  // Get user's projects
-  const projects = await Project.find({
-    $or: [
-      { owner: req.user.id },
-      { 'members.user': req.user.id }
-    ]
-  }).select('_id');
+  // Get user's projects for tenant
+  const projects = await Project.find({ tenantId: req.tenantId }).select('_id');
 
   const projectIds = projects.map(p => p._id);
 
   const activities = await Activity.find({ 
-    project: { $in: projectIds } 
+    project: { $in: projectIds },
+    tenantId: req.tenantId
   })
   .populate('user', 'name email avatar')
   .populate('project', 'name')
@@ -35,7 +31,8 @@ exports.getActivities = asyncHandler(async (req, res, next) => {
 // Get activities for a specific project
 exports.getProjectActivities = asyncHandler(async (req, res, next) => {
   const activities = await Activity.find({ 
-    project: req.params.projectId 
+    project: req.params.projectId,
+    tenantId: req.tenantId
   })
   .populate('user', 'name email avatar')
   .populate('task', 'title')
@@ -52,7 +49,8 @@ exports.getProjectActivities = asyncHandler(async (req, res, next) => {
 // Get activities for a specific user
 exports.getUserActivities = asyncHandler(async (req, res, next) => {
   const activities = await Activity.find({ 
-    user: req.params.userId 
+    user: req.params.userId,
+    tenantId: req.tenantId
   })
   .populate('user', 'name email avatar')
   .populate('project', 'name')

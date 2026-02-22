@@ -28,6 +28,11 @@ const taskSchema = new mongoose.Schema({
     ref: 'Project',
     required: true
   },
+  tenantId: {
+    type: String,
+    required: true,
+    index: true
+  },
   assignee: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'

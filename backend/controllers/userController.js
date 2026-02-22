@@ -5,9 +5,9 @@ const ErrorResponse = require('../utils/errorResponse');
 
 // Get all users
 exports.getUsers = asyncHandler(async (req, res, next) => {
-  const users = await User.find({ isActive: true })
+  const users = await User.find({ isActive: true, tenantId: req.tenantId })
     .select('name email avatar role teams')
-    .populate('teams', 'name') // Ensure teams are populated with name
+    .populate('teams', 'name')
     .sort('name');
 
   res.status(200).json({
@@ -19,7 +19,10 @@ exports.getUsers = asyncHandler(async (req, res, next) => {
 
 // Get single user
 exports.getUser = asyncHandler(async (req, res, next) => {
-  const user = await User.findById(req.params.id)
+  const user = await User.findOne({
+    _id: req.params.id,
+    tenantId: req.tenantId
+  })
     .select('-password')
     .populate('teams', 'name description');
 
@@ -35,6 +38,16 @@ exports.getUser = asyncHandler(async (req, res, next) => {
 
 // Update user
 exports.updateUser = asyncHandler(async (req, res, next) => {
+  // Verify user belongs to same tenant
+  const targetUser = await User.findOne({
+    _id: req.params.id,
+    tenantId: req.tenantId
+  });
+
+  if (!targetUser) {
+    return next(new ErrorResponse(`User not found with id of ${req.params.id}`, 404));
+  }
+
   const fieldsToUpdate = {
     name: req.body.name,
     email: req.body.email,
@@ -55,6 +68,16 @@ exports.updateUser = asyncHandler(async (req, res, next) => {
 
 // Delete user (soft delete)
 exports.deleteUser = asyncHandler(async (req, res, next) => {
+  // Verify user belongs to same tenant
+  const targetUser = await User.findOne({
+    _id: req.params.id,
+    tenantId: req.tenantId
+  });
+
+  if (!targetUser) {
+    return next(new ErrorResponse(`User not found with id of ${req.params.id}`, 404));
+  }
+
   const user = await User.findByIdAndUpdate(
     req.params.id,
     { isActive: false },

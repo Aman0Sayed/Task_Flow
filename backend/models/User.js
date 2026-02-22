@@ -25,7 +25,12 @@ const userSchema = new mongoose.Schema({
   role: {
     type: String,
     enum: ['user', 'admin', 'manager'],
-    default: 'user'
+    default: 'manager'
+  },
+  tenantId: {
+    type: String,
+    required: true,
+    unique: true
   },
   avatar: {
     type: String,

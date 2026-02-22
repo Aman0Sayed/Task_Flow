@@ -6,16 +6,8 @@ const ErrorResponse = require('../utils/errorResponse');
 
 // Get all projects for user
 exports.getProjects = asyncHandler(async (req, res, next) => {
-  // Find the manager user
-  const managerUser = await require('../models/User').findOne({ email: 'manager@gmail.com' });
-  let orQuery = [
-    { owner: req.user.id },
-    { 'members.user': req.user.id }
-  ];
-  if (managerUser) {
-    orQuery.push({ owner: managerUser._id });
-  }
-  const projects = await Project.find({ $or: orQuery })
+  // Filter projects by tenant
+  const projects = await Project.find({ tenantId: req.tenantId })
     .populate('owner', 'name email avatar')
     .populate('members.user', 'name email avatar')
     .populate('team', 'name')
@@ -30,21 +22,16 @@ exports.getProjects = asyncHandler(async (req, res, next) => {
 
 // Get single project
 exports.getProject = asyncHandler(async (req, res, next) => {
-  const project = await Project.findById(req.params.id)
+  const project = await Project.findOne({
+    _id: req.params.id,
+    tenantId: req.tenantId
+  })
     .populate('owner', 'name email avatar')
     .populate('members.user', 'name email avatar')
     .populate('team', 'name');
 
   if (!project) {
     return next(new ErrorResponse(`Project not found with id of ${req.params.id}`, 404));
-  }
-
-  // Check if user has access to project
-  const hasAccess = project.owner.equals(req.user.id) || 
-                   project.members.some(member => member.user.equals(req.user.id));
-
-  if (!hasAccess) {
-    return next(new ErrorResponse('Not authorized to access this project', 403));
   }
 
   res.status(200).json({
@@ -56,6 +43,7 @@ exports.getProject = asyncHandler(async (req, res, next) => {
 // Create new project
 exports.createProject = asyncHandler(async (req, res, next) => {
   req.body.owner = req.user.id;
+  req.body.tenantId = req.tenantId;
 
   const project = await Project.create(req.body);
 
@@ -64,7 +52,8 @@ exports.createProject = asyncHandler(async (req, res, next) => {
     type: 'project_created',
     description: `${req.user.name} created project ${project.name}`,
     user: req.user.id,
-    project: project._id
+    project: project._id,
+    tenantId: req.tenantId
   });
 
   // Emit socket event (only if req.io exists)
@@ -83,7 +72,10 @@ exports.createProject = asyncHandler(async (req, res, next) => {
 
 // Update project
 exports.updateProject = asyncHandler(async (req, res, next) => {
-  let project = await Project.findById(req.params.id);
+  let project = await Project.findOne({
+    _id: req.params.id,
+    tenantId: req.tenantId
+  });
 
   if (!project) {
     return next(new ErrorResponse(`Project not found with id of ${req.params.id}`, 404));
@@ -109,14 +101,17 @@ exports.updateProject = asyncHandler(async (req, res, next) => {
     description: `${req.user.name} updated project ${project.name}`,
     user: req.user.id,
     project: project._id,
+    tenantId: req.tenantId,
     metadata: { changes: req.body }
   });
 
   // Emit socket event
-  req.io.to(`project-${project._id}`).emit('project-updated', {
-    project,
-    user: req.user
-  });
+  if (req.io) {
+    req.io.to(`project-${project._id}`).emit('project-updated', {
+      project,
+      user: req.user
+    });
+  }
 
   res.status(200).json({
     success: true,
@@ -126,7 +121,10 @@ exports.updateProject = asyncHandler(async (req, res, next) => {
 
 // Delete project
 exports.deleteProject = asyncHandler(async (req, res, next) => {
-  const project = await Project.findById(req.params.id);
+  const project = await Project.findOne({
+    _id: req.params.id,
+    tenantId: req.tenantId
+  });
 
   if (!project) {
     return next(new ErrorResponse(`Project not found with id of ${req.params.id}`, 404));
@@ -140,10 +138,12 @@ exports.deleteProject = asyncHandler(async (req, res, next) => {
   await project.deleteOne();
 
   // Emit socket event
-  req.io.emit('project-deleted', {
-    projectId: project._id,
-    user: req.user
-  });
+  if (req.io) {
+    req.io.emit('project-deleted', {
+      projectId: project._id,
+      user: req.user
+    });
+  }
 
   res.status(200).json({
     success: true,
@@ -153,7 +153,10 @@ exports.deleteProject = asyncHandler(async (req, res, next) => {
 
 // Add member to project
 exports.addMember = asyncHandler(async (req, res, next) => {
-  const project = await Project.findById(req.params.id);
+  const project = await Project.findOne({
+    _id: req.params.id,
+    tenantId: req.tenantId
+  });
 
   if (!project) {
     return next(new ErrorResponse(`Project not found with id of ${req.params.id}`, 404));
@@ -190,6 +193,7 @@ exports.addMember = asyncHandler(async (req, res, next) => {
     description: `${req.user.name} added a new member to project ${project.name}`,
     user: req.user.id,
     project: project._id,
+    tenantId: req.tenantId,
     metadata: { newMemberId: req.body.userId }
   });
 
@@ -201,7 +205,10 @@ exports.addMember = asyncHandler(async (req, res, next) => {
 
 // Remove member from project
 exports.removeMember = asyncHandler(async (req, res, next) => {
-  const project = await Project.findById(req.params.id);
+  const project = await Project.findOne({
+    _id: req.params.id,
+    tenantId: req.tenantId
+  });
 
   if (!project) {
     return next(new ErrorResponse(`Project not found with id of ${req.params.id}`, 404));
@@ -228,6 +235,7 @@ exports.removeMember = asyncHandler(async (req, res, next) => {
     description: `${req.user.name} removed a member from project ${project.name}`,
     user: req.user.id,
     project: project._id,
+    tenantId: req.tenantId,
     metadata: { removedMemberId: req.params.userId }
   });
 

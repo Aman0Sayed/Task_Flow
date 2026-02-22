@@ -6,7 +6,8 @@ const ErrorResponse = require('../utils/errorResponse');
 // Get user notifications
 exports.getNotifications = asyncHandler(async (req, res, next) => {
   const notifications = await Notification.find({ 
-    recipient: req.user.id 
+    recipient: req.user.id,
+    tenantId: req.tenantId
   })
   .populate('relatedProject', 'name')
   .populate('relatedTask', 'title')
@@ -15,6 +16,7 @@ exports.getNotifications = asyncHandler(async (req, res, next) => {
 
   const unreadCount = await Notification.countDocuments({
     recipient: req.user.id,
+    tenantId: req.tenantId,
     isRead: false
   });
 
@@ -30,7 +32,8 @@ exports.getNotifications = asyncHandler(async (req, res, next) => {
 exports.markAsRead = asyncHandler(async (req, res, next) => {
   const notification = await Notification.findOne({
     _id: req.params.id,
-    recipient: req.user.id
+    recipient: req.user.id,
+    tenantId: req.tenantId
   });
 
   if (!notification) {
@@ -48,7 +51,7 @@ exports.markAsRead = asyncHandler(async (req, res, next) => {
 // Mark all as read
 exports.markAllAsRead = asyncHandler(async (req, res, next) => {
   await Notification.updateMany(
-    { recipient: req.user.id, isRead: false },
+    { recipient: req.user.id, tenantId: req.tenantId, isRead: false },
     { isRead: true }
   );
 
@@ -62,7 +65,8 @@ exports.markAllAsRead = asyncHandler(async (req, res, next) => {
 exports.deleteNotification = asyncHandler(async (req, res, next) => {
   const notification = await Notification.findOneAndDelete({
     _id: req.params.id,
-    recipient: req.user.id
+    recipient: req.user.id,
+    tenantId: req.tenantId
   });
 
   if (!notification) {
@@ -77,7 +81,10 @@ exports.deleteNotification = asyncHandler(async (req, res, next) => {
 
 // Clear all notifications
 exports.clearNotifications = asyncHandler(async (req, res, next) => {
-  await Notification.deleteMany({ recipient: req.user.id });
+  await Notification.deleteMany({ 
+    recipient: req.user.id,
+    tenantId: req.tenantId
+  });
 
   res.status(200).json({
     success: true,

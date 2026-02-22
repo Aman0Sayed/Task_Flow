@@ -9,12 +9,7 @@ const bcrypt = require('bcryptjs');
 
 // Get all teams
 exports.getTeams = asyncHandler(async (req, res, next) => {
-  const teams = await Team.find({
-    $or: [
-      { owner: req.user.id },
-      { 'members.user': req.user.id }
-    ]
-  })
+  const teams = await Team.find({ tenantId: req.tenantId })
   .populate('owner', 'name email avatar')
   .populate('members.user', 'name email avatar')
   .sort('-createdAt');
@@ -28,21 +23,16 @@ exports.getTeams = asyncHandler(async (req, res, next) => {
 
 // Get single team
 exports.getTeam = asyncHandler(async (req, res, next) => {
-  const team = await Team.findById(req.params.id)
+  const team = await Team.findOne({
+    _id: req.params.id,
+    tenantId: req.tenantId
+  })
     .populate('owner', 'name email avatar')
     .populate('members.user', 'name email avatar')
     .populate('projects', 'name status progress');
 
   if (!team) {
     return next(new ErrorResponse(`Team not found with id of ${req.params.id}`, 404));
-  }
-
-  // Check if user has access
-  const hasAccess = team.owner.equals(req.user.id) || 
-                   team.members.some(member => member.user.equals(req.user.id));
-
-  if (!hasAccess) {
-    return next(new ErrorResponse('Not authorized to access this team', 403));
   }
 
   res.status(200).json({
@@ -54,6 +44,7 @@ exports.getTeam = asyncHandler(async (req, res, next) => {
 // Create team
 exports.createTeam = asyncHandler(async (req, res, next) => {
   req.body.owner = req.user.id;
+  req.body.tenantId = req.tenantId;
 
   const team = await Team.create(req.body);
   
@@ -81,7 +72,10 @@ exports.createTeam = asyncHandler(async (req, res, next) => {
 
 // Update team
 exports.updateTeam = asyncHandler(async (req, res, next) => {
-  let team = await Team.findById(req.params.id);
+  let team = await Team.findOne({
+    _id: req.params.id,
+    tenantId: req.tenantId
+  });
 
   if (!team) {
     return next(new ErrorResponse(`Team not found with id of ${req.params.id}`, 404));
@@ -108,7 +102,10 @@ exports.updateTeam = asyncHandler(async (req, res, next) => {
 
 // Delete team
 exports.deleteTeam = asyncHandler(async (req, res, next) => {
-  const team = await Team.findById(req.params.id);
+  const team = await Team.findOne({
+    _id: req.params.id,
+    tenantId: req.tenantId
+  });
 
   if (!team) {
     return next(new ErrorResponse(`Team not found with id of ${req.params.id}`, 404));
@@ -119,7 +116,7 @@ exports.deleteTeam = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse('Only team owner can delete the team', 403));
   }
 
-  await team.remove();
+  await team.deleteOne();
 
   // Remove team from all users
   await User.updateMany(
@@ -137,7 +134,10 @@ exports.deleteTeam = asyncHandler(async (req, res, next) => {
 exports.joinTeam = asyncHandler(async (req, res, next) => {
   const { inviteCode } = req.body;
 
-  const team = await Team.findOne({ inviteCode });
+  const team = await Team.findOne({ 
+    inviteCode,
+    tenantId: req.tenantId
+  });
 
   if (!team) {
     return next(new ErrorResponse('Invalid invite code', 400));
@@ -167,6 +167,7 @@ exports.joinTeam = asyncHandler(async (req, res, next) => {
     type: 'member_joined',
     description: `${req.user.name} joined the team`,
     user: req.user.id,
+    tenantId: req.tenantId,
     metadata: { teamId: team._id }
   });
 
@@ -178,7 +179,10 @@ exports.joinTeam = asyncHandler(async (req, res, next) => {
 
 // Leave team
 exports.leaveTeam = asyncHandler(async (req, res, next) => {
-  const team = await Team.findById(req.params.id);
+  const team = await Team.findOne({
+    _id: req.params.id,
+    tenantId: req.tenantId
+  });
 
   if (!team) {
     return next(new ErrorResponse(`Team not found with id of ${req.params.id}`, 404));
@@ -206,7 +210,10 @@ exports.leaveTeam = asyncHandler(async (req, res, next) => {
 
 // Add member
 exports.addMember = asyncHandler(async (req, res, next) => {
-  const team = await Team.findById(req.params.id);
+  const team = await Team.findOne({
+    _id: req.params.id,
+    tenantId: req.tenantId
+  });
 
   if (!team) {
     return next(new ErrorResponse(`Team not found with id of ${req.params.id}`, 404));
@@ -248,7 +255,10 @@ exports.addMember = asyncHandler(async (req, res, next) => {
 
 // Remove member
 exports.removeMember = asyncHandler(async (req, res, next) => {
-  const team = await Team.findById(req.params.id);
+  const team = await Team.findOne({
+    _id: req.params.id,
+    tenantId: req.tenantId
+  });
 
   if (!team) {
     return next(new ErrorResponse(`Team not found with id of ${req.params.id}`, 404));
@@ -279,7 +289,10 @@ exports.removeMember = asyncHandler(async (req, res, next) => {
 
 // Update member role
 exports.updateMemberRole = asyncHandler(async (req, res, next) => {
-  const team = await Team.findById(req.params.id);
+  const team = await Team.findOne({
+    _id: req.params.id,
+    tenantId: req.tenantId
+  });
 
   if (!team) {
     return next(new ErrorResponse(`Team not found with id of ${req.params.id}`, 404));
@@ -311,7 +324,10 @@ exports.updateMemberRole = asyncHandler(async (req, res, next) => {
 
 // Add member and create user if not exists
 exports.addMemberAndCreateUser = asyncHandler(async (req, res, next) => {
-  const team = await Team.findById(req.params.id);
+  const team = await Team.findOne({
+    _id: req.params.id,
+    tenantId: req.tenantId
+  });
   if (!team) {
     return next(new ErrorResponse(`Team not found with id of ${req.params.id}`, 404));
   }
@@ -328,20 +344,18 @@ exports.addMemberAndCreateUser = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse('Name, email, and password are required', 400));
   }
 
-  // Check if user exists
-  let user = await User.findOne({ email });
+  // Check if user exists with same email in same tenant
+  let user = await User.findOne({ email, tenantId: req.tenantId });
   if (!user) {
-    // Create user
-    const hashedPassword = await bcrypt.hash(password, 10);
-    user = await User.create({ name, email, password: hashedPassword });
+    // Create user with same tenant ID
+    user = await User.create({ 
+      name, 
+      email, 
+      password,
+      role: 'manager',
+      tenantId: req.tenantId
+    });
   }
-
-  // Remove user from all other teams
-  await Team.updateMany(
-    { 'members.user': user._id, _id: { $ne: team._id } },
-    { $pull: { members: { user: user._id } } }
-  );
-  await User.findByIdAndUpdate(user._id, { $set: { teams: [team._id] } });
 
   // Check if already a member of this team
   const isMember = team.members.some(member => member.user.equals(user._id));

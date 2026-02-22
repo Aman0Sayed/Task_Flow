@@ -7,6 +7,11 @@ const notificationSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  tenantId: {
+    type: String,
+    required: true,
+    index: true
+  },
   type: {
     type: String,
     enum: ['task_assigned', 'task_due', 'mention', 'project_invite', 

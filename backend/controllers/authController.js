@@ -2,16 +2,24 @@
 const User = require('../models/User');
 const asyncHandler = require('../utils/asyncHandler');
 const ErrorResponse = require('../utils/errorResponse');
+const crypto = require('crypto');
+
+// Generate unique tenant ID
+const generateTenantId = () => {
+  return crypto.randomBytes(12).toString('hex');
+};
 
 // Register user
 exports.register = asyncHandler(async (req, res, next) => {
   const { name, email, password } = req.body;
 
-  // Create user
+  // Create user with manager role and unique tenant ID
   const user = await User.create({
     name,
     email,
-    password
+    password,
+    role: 'manager',
+    tenantId: generateTenantId()
   });
 
   sendTokenResponse(user, 201, res);
@@ -127,6 +135,7 @@ const sendTokenResponse = (user, statusCode, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        tenantId: user.tenantId,
         preferences: user.preferences
       }
     });

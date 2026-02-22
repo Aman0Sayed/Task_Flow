@@ -8,7 +8,10 @@ const ErrorResponse = require('../utils/errorResponse');
 
 // Get all tasks for a project
 exports.getTasks = asyncHandler(async (req, res, next) => {
-  const tasks = await Task.find({ project: req.params.projectId })
+  const tasks = await Task.find({ 
+    project: req.params.projectId,
+    tenantId: req.tenantId
+  })
     .populate('assignee', 'name email avatar')
     .populate('assignedBy', 'name email avatar')
     .sort('position');
@@ -22,7 +25,10 @@ exports.getTasks = asyncHandler(async (req, res, next) => {
 
 // Get single task
 exports.getTask = asyncHandler(async (req, res, next) => {
-  const task = await Task.findById(req.params.id)
+  const task = await Task.findOne({
+    _id: req.params.id,
+    tenantId: req.tenantId
+  })
     .populate('assignee', 'name email avatar')
     .populate('assignedBy', 'name email avatar')
     .populate('project', 'name')
@@ -40,18 +46,12 @@ exports.getTask = asyncHandler(async (req, res, next) => {
 
 // Get all tasks (for all projects the user has access to)
 exports.getAllTasks = asyncHandler(async (req, res, next) => {
-  const User = require('../models/User');
-  const managerUser = await User.findOne({ email: 'manager@gmail.com' });
-  let orQuery = [
-    { owner: req.user.id },
-    { 'members.user': req.user.id }
-  ];
-  if (managerUser) {
-    orQuery.push({ owner: managerUser._id });
-  }
-  const projects = await Project.find({ $or: orQuery }).select('_id');
+  const projects = await Project.find({ tenantId: req.tenantId }).select('_id');
   const projectIds = projects.map(p => p._id);
-  const tasks = await Task.find({ project: { $in: projectIds } })
+  const tasks = await Task.find({ 
+    project: { $in: projectIds },
+    tenantId: req.tenantId
+  })
     .populate('assignee', 'name email avatar')
     .populate('assignedBy', 'name email avatar')
     .populate('project', 'name')
@@ -67,18 +67,15 @@ exports.getAllTasks = asyncHandler(async (req, res, next) => {
 // Create new task
 exports.createTask = asyncHandler(async (req, res, next) => {
   req.body.assignedBy = req.user.id;
+  req.body.tenantId = req.tenantId;
 
   // Check if project exists and user has access
-  const project = await Project.findById(req.body.project);
+  const project = await Project.findOne({
+    _id: req.body.project,
+    tenantId: req.tenantId
+  });
   if (!project) {
     return next(new ErrorResponse('Project not found', 404));
-  }
-
-  const hasAccess = project.owner.equals(req.user.id) || 
-                   project.members.some(member => member.user.equals(req.user.id));
-
-  if (!hasAccess) {
-    return next(new ErrorResponse('Not authorized to create tasks in this project', 403));
   }
 
   const task = await Task.create(req.body);
@@ -89,7 +86,8 @@ exports.createTask = asyncHandler(async (req, res, next) => {
     description: `${req.user.name} created task "${task.title}"`,
     user: req.user.id,
     project: project._id,
-    task: task._id
+    task: task._id,
+    tenantId: req.tenantId
   });
 
   // Create notification if task is assigned
@@ -101,15 +99,18 @@ exports.createTask = asyncHandler(async (req, res, next) => {
       message: `${req.user.name} assigned you a new task: ${task.title}`,
       link: `/tasks/${task._id}`,
       relatedProject: project._id,
-      relatedTask: task._id
+      relatedTask: task._id,
+      tenantId: req.tenantId
     });
   }
 
   // Emit socket event
-  req.io.to(`project-${project._id}`).emit('task-created', {
-    task,
-    user: req.user
-  });
+  if (req.io) {
+    req.io.to(`project-${project._id}`).emit('task-created', {
+      task,
+      user: req.user
+    });
+  }
 
   res.status(201).json({
     success: true,

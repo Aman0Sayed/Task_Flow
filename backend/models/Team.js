@@ -15,6 +15,11 @@ const teamSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  tenantId: {
+    type: String,
+    required: true,
+    index: true
+  },
   members: [{
     user: {
       type: mongoose.Schema.Types.ObjectId,
