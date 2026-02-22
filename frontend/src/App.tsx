@@ -18,6 +18,7 @@ import Login from './pages/Login';
 import Signup from './pages/Signup';
  
 import ProtectedRoute from './components/auth/ProtectedRoute';
+import UnderConstructionModal from './components/modals/UnderConstructionModal';
 import { AuthProvider } from './context/AuthContext';
 import { DataProvider } from './context/DataContext';
 import { ThemeProvider } from './context/ThemeContext';
@@ -44,6 +45,7 @@ function App() {
     <AuthProvider>
       <ThemeProvider>
         <DataProvider>
+          <UnderConstructionModal />
           <Routes>
           {/* Auth routes */}
           <Route path="/login" element={<Login />} />
