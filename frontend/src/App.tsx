@@ -11,6 +11,7 @@ import Calendar from './pages/Calendar';
 import Reports from './pages/Reports';
 import Settings from './pages/Settings';
 import Profile from './pages/Profile';
+import PublicProfile from './pages/PublicProfile';
 import Help from './pages/Help';
 import KanbanBoard from './pages/KanbanBoard';
 import NotFound from './pages/NotFound';
@@ -50,6 +51,9 @@ function App() {
           {/* Auth routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
+
+          {/* Public profile route */}
+          <Route path="/profile/:taskflowId" element={<PublicProfile />} />
 
           {/* Protected routes */}
           <Route path="/" element={
