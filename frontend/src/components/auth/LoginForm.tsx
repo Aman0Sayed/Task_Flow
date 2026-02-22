@@ -8,7 +8,6 @@ function LoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [role, setRole] = useState<'user' | 'manager'>('user');
   const [formError, setFormError] = useState('');
 
   const dispatch = useAppDispatch();
@@ -23,35 +22,18 @@ function LoginForm() {
     e.preventDefault();
     setFormError('');
 
-    if (role === 'manager') {
-      // Redirect to manager setup
-      navigate('/manager-setup');
+    if (!email) {
+      setFormError('Email is required');
       return;
     }
 
-    if (role === 'user') {
-      if (!email) {
-        setFormError('Email is required');
-        return;
-      }
-    } else {
-      if (!email) {
-        setFormError('Email is required');
-        return;
-      }
-
-      if (!password) {
-        setFormError('Password is required');
-        return;
-      }
+    if (!password) {
+      setFormError('Password is required');
+      return;
     }
 
     try {
-      const loginData: any = { email, role };
-      if (role === 'manager' || role === 'user' && password) {
-        loginData.password = password;
-      }
-      await dispatch(loginUser(loginData))
+      await dispatch(loginUser({email, password}))
       navigate('/');
     } catch (error) {
       setFormError(error instanceof Error ? error.message : 'Failed to login account');
@@ -81,36 +63,7 @@ function LoginForm() {
         </p>
       </div>
 
-      {/* Role Selection */}
-      <div className="mb-6">
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-          Login as:
-        </label>
-        <div className="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
-          <button
-            type="button"
-            onClick={() => setRole('user')}
-            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all duration-200 ${
-              role === 'user'
-                ? 'bg-white dark:bg-gray-700 text-primary-600 dark:text-primary-400 shadow-sm'
-                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
-            }`}
-          >
-            User
-          </button>
-          <button
-            type="button"
-            onClick={() => setRole('manager')}
-            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all duration-200 ${
-              role === 'manager'
-                ? 'bg-white dark:bg-gray-700 text-primary-600 dark:text-primary-400 shadow-sm'
-                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
-            }`}
-          >
-            Manager
-          </button>
-        </div>
-      </div>
+
 
       {formError && (
         <div className="p-3 bg-error-50 border border-error-200 text-error-800 dark:bg-error-900/30 dark:border-error-800 dark:text-error-400 rounded-lg animate-fade-in">
@@ -118,8 +71,7 @@ function LoginForm() {
         </div>
       )}
 
-      {role === 'user' ? (
-        <div className="space-y-4">
+      <div className="space-y-4">
           <div className="space-y-2">
             <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
               Email address
@@ -189,14 +141,7 @@ function LoginForm() {
               Forgot password?
             </a>
           </div>
-        </div>
-      ) : (
-        <div className="text-center py-4">
-          <p className="text-gray-600 dark:text-gray-400">
-            Set up your company and start managing projects as a manager.
-          </p>
-        </div>
-      )}
+      </div>
 
       <button
         type="submit"
@@ -210,7 +155,7 @@ function LoginForm() {
         ) : (
           <LogIn size={18} className="mr-2" />
         )}
-        {isLoading ? 'Signing in...' : role === 'user' ? 'Sign in' : 'Setup as Manager'}
+        {isLoading ? 'Signing in...' : 'Sign in'}
       </button>
 
       <div className="text-center mt-4">

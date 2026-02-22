@@ -1,6 +1,6 @@
 import { useState, FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Eye, EyeOff, Mail, Lock, User, UserPlus } from 'lucide-react';
+import { Eye, EyeOff, Mail, Lock, User, UserPlus, Building } from 'lucide-react';
 import { useAppDispatch, useAppSelector } from '../../hooks/hook';
 import { registerUser } from '../../features/auth/authSlice';
 
@@ -9,6 +9,7 @@ interface FormData {
   email: string;
   password: string;
   confirmPassword: string;
+  companyName?: string;
 }
 
 function SignupForm() {
@@ -16,9 +17,11 @@ function SignupForm() {
     name: '',
     email: '',
     password: '',
-    confirmPassword: ''
+    confirmPassword: '',
+    companyName: ''
   });
   const [showPassword, setShowPassword] = useState(false);
+  const [role, setRole] = useState<'user' | 'manager'>('user');
   const [formError, setFormError] = useState('');
   const dispatch = useAppDispatch();
   const { isLoading, error } = useAppSelector((state) => state.auth);
@@ -49,6 +52,11 @@ function SignupForm() {
       setFormError('Passwords do not match');
       return false;
     }
+
+    if (role === 'manager' && !formData.companyName) {
+      setFormError('Company name is required for managers');
+      return false;
+    }
     
     return true;
   };
@@ -62,11 +70,18 @@ function SignupForm() {
     }
 
     try {
-      await dispatch(registerUser({
+      const registerData: any = {
         name: formData.name,
         email: formData.email,
-        password: formData.password
-      })).unwrap();
+        password: formData.password,
+        role
+      };
+
+      if (role === 'manager' && formData.companyName) {
+        registerData.companyName = formData.companyName;
+      }
+
+      await dispatch(registerUser(registerData)).unwrap();
       navigate('/'); // Go to root, which is dashboard for authenticated users
     } catch {
       setFormError(error || 'Failed to create account');
@@ -86,6 +101,37 @@ function SignupForm() {
         <p className="text-gray-600 dark:text-gray-400">
           Sign up to start using TaskFlow
         </p>
+      </div>
+
+      {/* Role Selection */}
+      <div className="mb-6">
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
+          Sign up as:
+        </label>
+        <div className="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1">
+          <button
+            type="button"
+            onClick={() => setRole('user')}
+            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all duration-200 ${
+              role === 'user'
+                ? 'bg-white dark:bg-gray-700 text-primary-600 dark:text-primary-400 shadow-sm'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+            }`}
+          >
+            User
+          </button>
+          <button
+            type="button"
+            onClick={() => setRole('manager')}
+            className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-all duration-200 ${
+              role === 'manager'
+                ? 'bg-white dark:bg-gray-700 text-primary-600 dark:text-primary-400 shadow-sm'
+                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+            }`}
+          >
+            Manager
+          </button>
+        </div>
       </div>
 
       {formError && (
@@ -136,6 +182,29 @@ function SignupForm() {
             />
           </div>
         </div>
+
+        {role === 'manager' && (
+          <div className="space-y-2">
+            <label htmlFor="companyName" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+              Company Name
+            </label>
+            <div className="relative">
+              <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                <Building size={18} className="text-gray-400" />
+              </div>
+              <input
+                id="companyName"
+                type="text"
+                value={formData.companyName}
+                onChange={handleChange}
+                placeholder="Your Company Ltd"
+                className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 dark:border-gray-700 rounded-md shadow-sm placeholder-gray-400 
+                  focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500
+                  bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+              />
+            </div>
+          </div>
+        )}
 
         <div className="space-y-2">
           <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
