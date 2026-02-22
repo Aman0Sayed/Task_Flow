@@ -62,6 +62,11 @@ export function DataProvider({ children }: DataProviderProps) {
         fetch(`${BASE_URL}/api/activities`, { headers }),
       ]);
 
+      // Check for errors
+      if (!tasksRes.ok || !projectsRes.ok || !teamsRes.ok || !usersRes.ok || !activitiesRes.ok) {
+        throw new Error('One or more API requests failed');
+      }
+
       const [tasksData, projectsData, teamsData, usersData, activitiesData] = await Promise.all([
         tasksRes.json(),
         projectsRes.json(),
@@ -70,16 +75,33 @@ export function DataProvider({ children }: DataProviderProps) {
         activitiesRes.json(),
       ]);
 
+      // Validate and extract data safely
+      const tasks = Array.isArray(tasksData) ? tasksData : (tasksData?.data || []);
+      const projects = Array.isArray(projectsData) ? projectsData : (projectsData?.data || []);
+      const teams = Array.isArray(teamsData) ? teamsData : (teamsData?.data || []);
+      const users = Array.isArray(usersData) ? usersData : (usersData?.data || []);
+      const activities = Array.isArray(activitiesData) ? activitiesData : (activitiesData?.data || []);
+
+      // Log data for debugging
+      console.debug('📊 Data fetched:', { 
+        tasksCount: tasks.length, 
+        projectsCount: projects.length,
+        teamsCount: teams.length,
+        usersCount: users.length,
+        activitiesCount: activities.length
+      });
+
       setData({
-        tasks: tasksData.data || tasksData || [],
-        projects: projectsData.data || projectsData || [],
-        teams: teamsData.data || teamsData || [],
-        users: usersData.data || usersData || [],
-        activities: activitiesData.data || activitiesData || [],
+        tasks,
+        projects,
+        teams,
+        users,
+        activities,
         isLoading: false,
         error: null,
       });
     } catch (error) {
+      console.error('❌ Failed to fetch data:', error);
       setData(prev => ({
         ...prev,
         isLoading: false,

@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { BarChart, CheckCheck, Clock, Users, Plus, AlertCircle, TrendingUp } from 'lucide-react';
 import StatsCard from '../components/dashboard/StatsCard';
@@ -14,14 +14,39 @@ import { CardSkeleton, StatsCardSkeleton, TaskCardSkeleton } from '../components
 
 export default function Dashboard() {
   const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState(false);
-  const { tasks, projects, isLoading, refetchData, activities, users } = useData();
+  const { tasks, projects, isLoading, refetchData, activities, users, teams } = useData();
   const user = useAppSelector((state) => state.auth.user);
+
+  // Debug: Log raw data
+  useEffect(() => {
+    console.debug('🔍 Dashboard Data:', {
+      tasksCount: tasks.length,
+      projectsCount: projects.length,
+      teamsCount: teams.length,
+      usersCount: users.length,
+      activitiesCount: activities.length,
+      loading: isLoading
+    });
+  }, [tasks, projects, teams, users, activities, isLoading]);
 
   // Calculate stats from real data with better handling
   const stats = useMemo(() => {
     const now = new Date();
     
-    return {
+    // Get unique team members from teams (real data only)
+    const teamMemberIds = new Set<string>();
+    teams.forEach((team: any) => {
+      if (team.members && Array.isArray(team.members)) {
+        team.members.forEach((member: any) => {
+          if (member.user) {
+            const userId = typeof member.user === 'string' ? member.user : member.user._id;
+            if (userId) teamMemberIds.add(userId);
+          }
+        });
+      }
+    });
+    
+    const calculatedStats = {
       totalProjects: projects.length,
       activeProjects: projects.filter(project => 
         project.status?.toLowerCase() === 'active' || project.status === 'Active'
@@ -36,7 +61,8 @@ export default function Dashboard() {
       tasksTodo: tasks.filter(task => 
         task.status?.toLowerCase() === 'todo' || task.status === 'To Do'
       ).length,
-      teamMembers: users.length,
+      teamMembers: teamMemberIds.size, // Real count of team members
+      totalTeams: teams.length,
       upcomingDeadlines: tasks.filter(task => {
         if (!task.dueDate) return false;
         const dueDate = new Date(task.dueDate);
@@ -57,7 +83,12 @@ export default function Dashboard() {
           ).length / tasks.length) * 100)
         : 0
     };
-  }, [tasks, projects, users]);
+
+    // Log calculated stats for debugging
+    console.debug('📈 Calculated Stats:', calculatedStats);
+    
+    return calculatedStats;
+  }, [tasks, projects, users, teams]);
 
   // Handle new project creation
   const handleNewProject = (_createdProject: any) => {
@@ -133,8 +164,8 @@ export default function Dashboard() {
               value={stats.teamMembers}
               icon={Users}
               iconColor="bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400"
-              trend={{ value: stats.completionRate, direction: 'up' }}
-              subtitle={`${stats.completionRate}% tasks done`}
+              trend={stats.teamMembers > 0 ? { value: Math.round((stats.teamMembers / (stats.teamMembers + 1)) * 100), direction: 'up' } : undefined}
+              subtitle={stats.totalTeams > 0 ? `${stats.totalTeams} team${stats.totalTeams !== 1 ? 's' : ''}` : 'No teams yet'}
             />
           </>
         )}
