@@ -62,10 +62,10 @@ export default function UnderConstructionModal() {
           {/* Contact info */}
           <div className="bg-gray-50 rounded-lg p-4 mb-6">
             <p className="text-xs text-gray-600 text-center">
-              For inquiries or early access, contact us at:
+              {/* For inquiries or early access, contact us at: */}
             </p>
             <p className="text-sm font-semibold text-center text-blue-600 mt-1">
-              support@taskflow.com
+              {/* support@taskflow.com */}
             </p>
           </div>
 
