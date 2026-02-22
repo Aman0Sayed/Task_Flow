@@ -23,6 +23,8 @@ interface RegisterPayload {
   name: string;
   email: string;
   password: string;
+  companyName?: string;
+  role?: string;
 }
 
 interface RegisterResponse {
@@ -32,7 +34,8 @@ interface RegisterResponse {
 
 interface LoginPayload {
   email: string;
-  password: string;
+  password?: string;
+  role?: string;
 }
 
 interface LoginResponse {

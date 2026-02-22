@@ -17,6 +17,7 @@ import KanbanBoard from './pages/KanbanBoard';
 import NotFound from './pages/NotFound';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
+import ManagerSetup from './pages/ManagerSetup';
  
 import ProtectedRoute from './components/auth/ProtectedRoute';
 import UnderConstructionModal from './components/modals/UnderConstructionModal';
@@ -51,6 +52,7 @@ function App() {
           {/* Auth routes */}
           <Route path="/login" element={<Login />} />
           <Route path="/signup" element={<Signup />} />
+          <Route path="/manager-setup" element={<ManagerSetup />} />
 
           {/* Public profile route */}
           <Route path="/profile/:taskflowId" element={<PublicProfile />} />

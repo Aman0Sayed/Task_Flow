@@ -39,19 +39,20 @@ const generateTaskflowId = async (name) => {
 
 // Register user
 exports.register = asyncHandler(async (req, res, next) => {
-  const { name, email, password } = req.body;
+  const { name, email, password, role = 'manager', companyName } = req.body;
 
   // Generate unique TaskFlow ID
   const taskflowId = await generateTaskflowId(name);
 
-  // Create user with manager role, unique tenant ID, and TaskFlow ID
+  // Create user with specified role, unique tenant ID, and TaskFlow ID
   const user = await User.create({
     name,
     email,
     password,
-    role: 'manager',
+    role,
     tenantId: generateTenantId(),
-    taskflowId
+    taskflowId,
+    companyName: role === 'manager' ? companyName : null
   });
 
   sendTokenResponse(user, 201, res);
@@ -59,25 +60,39 @@ exports.register = asyncHandler(async (req, res, next) => {
 
 // Login user
 exports.login = asyncHandler(async (req, res, next) => {
-  const { email, password } = req.body;
+  const { email, password, role = 'manager' } = req.body;
 
-  // Validate email & password
-  if (!email || !password) {
-    return next(new ErrorResponse('Please provide an email and password', 400));
+  // Validate email
+  if (!email) {
+    return next(new ErrorResponse('Please provide an email', 400));
   }
 
   // Check for user
-  const user = await User.findOne({ email }).select('+password');
+  let user = await User.findOne({ email }).select('+password');
 
   if (!user) {
-    return next(new ErrorResponse('Invalid credentials', 401));
+    if (role === 'user') {
+      // Create user account for user role
+      const taskflowId = await generateTaskflowId(email.split('@')[0]); // Use email prefix as name
+      user = await User.create({
+        name: email.split('@')[0],
+        email,
+        password: 'defaultpassword', // Set a default password
+        role: 'user',
+        tenantId: generateTenantId(),
+        taskflowId
+      });
+    } else {
+      return next(new ErrorResponse('Invalid credentials', 401));
+    }
   }
 
-  // Check if password matches
-  const isMatch = await user.matchPassword(password);
-
-  if (!isMatch) {
-    return next(new ErrorResponse('Invalid credentials', 401));
+  // For existing users, check password if provided
+  if (password && user.role !== 'user') {
+    const isMatch = await user.matchPassword(password);
+    if (!isMatch) {
+      return next(new ErrorResponse('Invalid credentials', 401));
+    }
   }
 
   // Update last login

@@ -40,6 +40,10 @@ const userSchema = new mongoose.Schema({
     trim: true,
     index: true
   },
+  companyName: {
+    type: String,
+    default: null
+  },
   avatar: {
     type: String,
     default: null
