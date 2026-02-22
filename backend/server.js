@@ -17,6 +17,7 @@ const teamRoutes = require('./routes/teams');
 const activityRoutes = require('./routes/activities');
 const notificationRoutes = require('./routes/notifications');
 const reportRoutes = require('./routes/reports');
+const collaborationRoutes = require('./routes/collaboration');
 
 // Middleware imports
 const errorHandler = require('./middlewares/errorHandler');
@@ -87,6 +88,7 @@ app.use('/api/teams', teamRoutes);
 app.use('/api/activities', activityRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/collaboration', collaborationRoutes);
 
 // Root route (prevents Cannot GET / confusion)
 app.get('/', (req, res) => {

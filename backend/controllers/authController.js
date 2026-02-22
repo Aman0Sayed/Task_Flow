@@ -9,17 +9,49 @@ const generateTenantId = () => {
   return crypto.randomBytes(12).toString('hex');
 };
 
+// Generate unique TaskFlow ID (like social media username)
+const generateTaskflowId = async (name) => {
+  // Create base ID from name (slugify: lowercase, replace spaces with underscore)
+  const baseId = name
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '_')
+    .replace(/[^a-z0-9_]/g, '')
+    .substring(0, 20); // Limit to 20 chars
+
+  let taskflowId = baseId;
+  let counter = 1;
+
+  // Check if ID exists, if so add random suffix
+  while (await User.findOne({ taskflowId })) {
+    const suffix = Math.floor(Math.random() * 10000);
+    taskflowId = `${baseId}_${suffix}`;
+    counter++;
+    if (counter > 10) {
+      // Fallback: use completely random ID
+      taskflowId = `user_${crypto.randomBytes(6).toString('hex')}`;
+      break;
+    }
+  }
+
+  return taskflowId;
+};
+
 // Register user
 exports.register = asyncHandler(async (req, res, next) => {
   const { name, email, password } = req.body;
 
-  // Create user with manager role and unique tenant ID
+  // Generate unique TaskFlow ID
+  const taskflowId = await generateTaskflowId(name);
+
+  // Create user with manager role, unique tenant ID, and TaskFlow ID
   const user = await User.create({
     name,
     email,
     password,
     role: 'manager',
-    tenantId: generateTenantId()
+    tenantId: generateTenantId(),
+    taskflowId
   });
 
   sendTokenResponse(user, 201, res);
@@ -136,6 +168,7 @@ const sendTokenResponse = (user, statusCode, res) => {
         email: user.email,
         role: user.role,
         tenantId: user.tenantId,
+        taskflowId: user.taskflowId,
         preferences: user.preferences
       }
     });

@@ -32,6 +32,14 @@ const userSchema = new mongoose.Schema({
     required: true,
     unique: true
   },
+  taskflowId: {
+    type: String,
+    required: true,
+    unique: true,
+    lowercase: true,
+    trim: true,
+    index: true
+  },
   avatar: {
     type: String,
     default: null
