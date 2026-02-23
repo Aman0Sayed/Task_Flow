@@ -5,6 +5,9 @@ interface User {
   id: string;
   name: string;
   email: string;
+  role: string;
+  tenantId?: string;
+  taskflowId?: string;
   preferences?: {
     theme: 'light' | 'dark' | 'system';
     color: 'Blue' | 'Purple' | 'Green' | 'Red' | 'Orange';

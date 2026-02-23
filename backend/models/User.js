@@ -30,7 +30,7 @@ const userSchema = new mongoose.Schema({
   tenantId: {
     type: String,
     required: true,
-    unique: true
+    index: true  // Changed from unique: true to just index for proper multi-tenancy
   },
   taskflowId: {
     type: String,

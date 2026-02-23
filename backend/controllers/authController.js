@@ -44,15 +44,34 @@ exports.register = asyncHandler(async (req, res, next) => {
   // Generate unique TaskFlow ID
   const taskflowId = await generateTaskflowId(name);
 
-  // Create user with specified role, unique tenant ID, and TaskFlow ID
+  let tenantId;
+  
+  if (role === 'manager') {
+    if (!companyName) {
+      return next(new ErrorResponse('Company name is required for managers', 400));
+    }
+    // For managers: use companyName as basis for tenantId
+    tenantId = crypto
+      .createHash('sha256')
+      .update(companyName.toLowerCase().trim())
+      .digest('hex')
+      .substring(0, 24);
+    console.log(`✅ Manager ${taskflowId} - tenantId: ${tenantId} (based on company: ${companyName})`);
+  } else {
+    // For users: use a default tenant until they are added to a company team
+    tenantId = 'default_user_tenant';
+    console.log(`✅ User ${taskflowId} - tenantId: ${tenantId} (default, will be updated when added to team)`);
+  }
+
+  // Create user with specified role, tenant ID, and TaskFlow ID
   const user = await User.create({
     name,
     email,
     password,
     role,
-    tenantId: generateTenantId(),
+    tenantId,
     taskflowId,
-    companyName: role === 'manager' ? companyName : null
+    companyName
   });
 
   sendTokenResponse(user, 201, res);
@@ -60,7 +79,7 @@ exports.register = asyncHandler(async (req, res, next) => {
 
 // Login user
 exports.login = asyncHandler(async (req, res, next) => {
-  const { email, password, role = 'manager' } = req.body;
+  const { email, password } = req.body;
 
   // Validate email
   if (!email) {
@@ -71,23 +90,10 @@ exports.login = asyncHandler(async (req, res, next) => {
   let user = await User.findOne({ email }).select('+password');
 
   if (!user) {
-    if (role === 'user') {
-      // Create user account for user role
-      const taskflowId = await generateTaskflowId(email.split('@')[0]); // Use email prefix as name
-      user = await User.create({
-        name: email.split('@')[0],
-        email,
-        password: 'defaultpassword', // Set a default password
-        role: 'user',
-        tenantId: generateTenantId(),
-        taskflowId
-      });
-    } else {
-      return next(new ErrorResponse('Invalid credentials', 401));
-    }
+    return next(new ErrorResponse('Invalid credentials', 401));
   }
 
-  // For existing users, check password if provided
+  // For existing users, check password
   if (password && user.role !== 'user') {
     const isMatch = await user.matchPassword(password);
     if (!isMatch) {

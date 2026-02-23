@@ -14,6 +14,7 @@ router.use(protect);
 // Get all teams for user
 router.get('/', asyncHandler(async (req, res) => {
   const teams = await Team.find({
+    tenantId: req.tenantId,
     $or: [
       { owner: req.user.id },
       { 'members.user': req.user.id }
@@ -33,7 +34,10 @@ router.get('/', asyncHandler(async (req, res) => {
 
 // Get single team
 router.get('/:id', asyncHandler(async (req, res, next) => {
-  const team = await Team.findById(req.params.id)
+  const team = await Team.findOne({
+    _id: req.params.id,
+    tenantId: req.tenantId
+  })
     .populate('owner', 'name email avatar')
     .populate('members.user', 'name email avatar')
     .populate('projects', 'name status progress');
@@ -57,36 +61,15 @@ router.get('/:id', asyncHandler(async (req, res, next) => {
 }));
 
 // Create new team
-router.post('/', asyncHandler(async (req, res) => {
-  req.body.owner = req.user.id;
-  
-  const team = await Team.create(req.body);
-  
-  // Generate invite code
-  team.generateInviteCode();
-  await team.save();
-
-  // Add owner as admin member
-  team.members.push({
-    user: req.user.id,
-    role: 'admin'
-  });
-  await team.save();
-
-  // Update user's teams
-  await User.findByIdAndUpdate(req.user.id, {
-    $push: { teams: team._id }
-  });
-
-  res.status(201).json({
-    success: true,
-    data: team
-  });
-}));
+// Create team
+router.post('/', teamController.createTeam);
 
 // Update team
 router.put('/:id', asyncHandler(async (req, res, next) => {
-  let team = await Team.findById(req.params.id);
+  let team = await Team.findOne({
+    _id: req.params.id,
+    tenantId: req.tenantId
+  });
 
   if (!team) {
     return next(new ErrorResponse(`Team not found with id of ${req.params.id}`, 404));
@@ -114,7 +97,10 @@ router.put('/:id', asyncHandler(async (req, res, next) => {
 
 // Delete team
 router.delete('/:id', asyncHandler(async (req, res, next) => {
-  const team = await Team.findById(req.params.id);
+  const team = await Team.findOne({
+    _id: req.params.id,
+    tenantId: req.tenantId
+  });
 
   if (!team) {
     return next(new ErrorResponse(`Team not found with id of ${req.params.id}`, 404));
@@ -165,7 +151,8 @@ router.post('/join', asyncHandler(async (req, res, next) => {
 
   // Add team to user
   await User.findByIdAndUpdate(req.user.id, {
-    $push: { teams: team._id }
+    $push: { teams: team._id },
+    tenantId: team.tenantId  // Update user's tenantId to match the team's tenant
   });
 
   res.status(200).json({
@@ -176,7 +163,10 @@ router.post('/join', asyncHandler(async (req, res, next) => {
 
 // Leave team
 router.post('/:id/leave', asyncHandler(async (req, res, next) => {
-  const team = await Team.findById(req.params.id);
+  const team = await Team.findOne({
+    _id: req.params.id,
+    tenantId: req.tenantId
+  });
 
   if (!team) {
     return next(new ErrorResponse(`Team not found with id of ${req.params.id}`, 404));
@@ -204,7 +194,10 @@ router.post('/:id/leave', asyncHandler(async (req, res, next) => {
 
 // Update member role
 router.put('/:id/members/:userId', asyncHandler(async (req, res, next) => {
-  const team = await Team.findById(req.params.id);
+  const team = await Team.findOne({
+    _id: req.params.id,
+    tenantId: req.tenantId
+  });
 
   if (!team) {
     return next(new ErrorResponse(`Team not found with id of ${req.params.id}`, 404));
@@ -237,11 +230,17 @@ router.put('/:id/members/:userId', asyncHandler(async (req, res, next) => {
   });
 }));
 
-// Add member and create user if not exists
-router.post('/:id/add-member', asyncHandler(async (req, res, next) => {
-  // This controller will create a user if not exists, then add to team
-  return teamController.addMemberAndCreateUser(req, res, next);
-}));
+// Add member
+router.post('/:id/add-member', teamController.addMember);
+
+// Get team invitations for current user
+router.get('/invitations', teamController.getTeamInvitations);
+
+// Accept team invitation
+router.put('/invitations/:id/accept', teamController.acceptInvitation);
+
+// Reject team invitation
+router.put('/invitations/:id/reject', teamController.rejectInvitation);
 
 module.exports = router;
 

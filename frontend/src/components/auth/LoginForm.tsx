@@ -63,8 +63,6 @@ function LoginForm() {
         </p>
       </div>
 
-
-
       {formError && (
         <div className="p-3 bg-error-50 border border-error-200 text-error-800 dark:bg-error-900/30 dark:border-error-800 dark:text-error-400 rounded-lg animate-fade-in">
           {formError}

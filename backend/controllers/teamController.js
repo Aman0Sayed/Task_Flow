@@ -3,9 +3,39 @@ const Team = require('../models/Team');
 const User = require('../models/User');
 const Project = require('../models/Project');
 const Activity = require('../models/Activity');
+const TeamInvitation = require('../models/TeamInvitation');
 const asyncHandler = require('../utils/asyncHandler');
 const ErrorResponse = require('../utils/errorResponse');
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
+
+// Generate unique TaskFlow ID (like social media username)
+const generateTaskflowId = async (name) => {
+  // Create base ID from name (slugify: lowercase, replace spaces with underscore)
+  const baseId = name
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, '_')
+    .replace(/[^a-z0-9_]/g, '')
+    .substring(0, 20); // Limit to 20 chars
+
+  let taskflowId = baseId;
+  let counter = 1;
+
+  // Check if ID exists, if so add random suffix
+  while (await User.findOne({ taskflowId })) {
+    const suffix = Math.floor(Math.random() * 10000);
+    taskflowId = `${baseId}_${suffix}`;
+    counter++;
+    if (counter > 10) {
+      // Fallback: use completely random ID
+      taskflowId = `user_${crypto.randomBytes(6).toString('hex')}`;
+      break;
+    }
+  }
+
+  return taskflowId;
+};
 
 // Get all teams
 exports.getTeams = asyncHandler(async (req, res, next) => {
@@ -208,7 +238,7 @@ exports.leaveTeam = asyncHandler(async (req, res, next) => {
   });
 });
 
-// Add member
+// Send team invitation (replaces direct member addition)
 exports.addMember = asyncHandler(async (req, res, next) => {
   const team = await Team.findOne({
     _id: req.params.id,
@@ -220,12 +250,12 @@ exports.addMember = asyncHandler(async (req, res, next) => {
   }
 
   // Check authorization
-  const isAuthorized = team.owner.equals(req.user.id) || 
-                      team.members.some(m => m.user.equals(req.user.id) && 
+  const isAuthorized = team.owner.equals(req.user.id) ||
+                      team.members.some(m => m.user.equals(req.user.id) &&
                       (m.role === 'admin' || m.role === 'lead'));
 
   if (!isAuthorized) {
-    return next(new ErrorResponse('Not authorized to add members', 403));
+    return next(new ErrorResponse('Not authorized to invite members', 403));
   }
 
   // Check if already a member
@@ -235,21 +265,29 @@ exports.addMember = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse('User is already a member', 400));
   }
 
-  // Add member
-  team.members.push({
-    user: req.body.userId,
-    role: req.body.role || 'member'
+  // Check if there's already a pending invitation
+  const existingInvitation = await TeamInvitation.findOne({
+    team: req.params.id,
+    invitedUser: req.body.userId,
+    status: 'pending'
   });
-  await team.save();
 
-  // Add team to user
-  await User.findByIdAndUpdate(req.body.userId, {
-    $push: { teams: team._id }
+  if (existingInvitation) {
+    return next(new ErrorResponse('Invitation already sent to this user', 400));
+  }
+
+  // Create invitation
+  const invitation = await TeamInvitation.create({
+    team: req.params.id,
+    invitedUser: req.body.userId,
+    invitedBy: req.user.id,
+    role: req.body.role || 'member',
+    tenantId: req.tenantId
   });
 
   res.status(200).json({
     success: true,
-    data: team
+    data: invitation
   });
 });
 
@@ -347,13 +385,18 @@ exports.addMemberAndCreateUser = asyncHandler(async (req, res, next) => {
   // Check if user exists with same email in same tenant
   let user = await User.findOne({ email, tenantId: req.tenantId });
   if (!user) {
+    // Generate unique TaskFlow ID
+    const taskflowId = await generateTaskflowId(name);
+    
     // Create user with same tenant ID
     user = await User.create({ 
       name, 
       email, 
       password,
-      role: 'manager',
-      tenantId: req.tenantId
+      role: 'user',
+      tenantId: req.tenantId,
+      taskflowId,
+      companyName: null
     });
   }
 
@@ -368,6 +411,91 @@ exports.addMemberAndCreateUser = asyncHandler(async (req, res, next) => {
   res.status(200).json({
     success: true,
     data: team
+  });
+});
+
+// Get team invitations for current user
+exports.getTeamInvitations = asyncHandler(async (req, res, next) => {
+  const invitations = await TeamInvitation.find({
+    invitedUser: req.user.id,
+    tenantId: req.tenantId
+  })
+  .populate('team', 'name description')
+  .populate('invitedBy', 'name email')
+  .sort('-invitedAt');
+
+  res.status(200).json({
+    success: true,
+    count: invitations.length,
+    data: invitations
+  });
+});
+
+// Accept team invitation
+exports.acceptInvitation = asyncHandler(async (req, res, next) => {
+  const invitation = await TeamInvitation.findOne({
+    _id: req.params.id,
+    invitedUser: req.user.id,
+    tenantId: req.tenantId,
+    status: 'pending'
+  });
+
+  if (!invitation) {
+    return next(new ErrorResponse('Invitation not found', 404));
+  }
+
+  // Update invitation status
+  invitation.status = 'accepted';
+  invitation.respondedAt = new Date();
+  await invitation.save();
+
+  // Add user to team
+  const team = await Team.findById(invitation.team);
+  if (team) {
+    // Check if not already a member
+    const isMember = team.members.some(member => member.user.equals(req.user.id));
+    if (!isMember) {
+      team.members.push({
+        user: req.user.id,
+        role: invitation.role
+      });
+      await team.save();
+    }
+
+    // Add team to user and update tenantId
+    await User.findByIdAndUpdate(req.user.id, {
+      $push: { teams: team._id },
+      tenantId: team.tenantId
+    });
+  }
+
+  res.status(200).json({
+    success: true,
+    data: invitation
+  });
+});
+
+// Reject team invitation
+exports.rejectInvitation = asyncHandler(async (req, res, next) => {
+  const invitation = await TeamInvitation.findOne({
+    _id: req.params.id,
+    invitedUser: req.user.id,
+    tenantId: req.tenantId,
+    status: 'pending'
+  });
+
+  if (!invitation) {
+    return next(new ErrorResponse('Invitation not found', 404));
+  }
+
+  // Update invitation status
+  invitation.status = 'rejected';
+  invitation.respondedAt = new Date();
+  await invitation.save();
+
+  res.status(200).json({
+    success: true,
+    data: invitation
   });
 });
 

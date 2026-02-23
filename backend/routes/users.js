@@ -1,26 +1,25 @@
 // routes/users.js
 const express = require('express');
 const { protect } = require('../middlewares/auth');
-const User = require('../models/User');
-const upload = require('../config/upload');
+const userController = require('../controllers/userController');
 const asyncHandler = require('../utils/asyncHandler');
+const upload = require('../config/upload');
 
 const router = express.Router();
 
 router.use(protect);
 
-// Get all users (for team member selection, etc.)
-router.get('/', asyncHandler(async (req, res) => {
-  const users = await User.find({ isActive: true })
-    .select('name email avatar')
-    .sort('name');
+// Get all users
+router.get('/', userController.getUsers);
 
-  res.status(200).json({
-    success: true,
-    count: users.length,
-    data: users
-  });
-}));
+// Get available users (users with role 'user' who are not in any team)
+router.get('/available', userController.getAvailableUsers);
+
+// Get all users for search
+router.get('/search', userController.getAllUsers);
+
+// Get team members (users who are in at least one team)
+router.get('/team-members', userController.getTeamMembers);
 
 // Get single user
 router.get('/:id', asyncHandler(async (req, res) => {
