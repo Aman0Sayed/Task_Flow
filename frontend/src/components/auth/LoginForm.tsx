@@ -14,13 +14,17 @@ function LoginForm() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  const { isLoading, error, user } = useAppSelector((state) => state.auth);
-
-  const from = location.state?.from?.pathname || '/';
+  const { isLoading, error } = useAppSelector((state) => state.auth);
+  const from = location.state?.from?.pathname;
+  const redirectPath = from && from !== '/login' ? from : '/';
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setFormError('');
+
+    if (isLoading) {
+      return;
+    }
 
     if (!email) {
       setFormError('Email is required');
@@ -33,18 +37,12 @@ function LoginForm() {
     }
 
     try {
-      await dispatch(loginUser({email, password}))
-      navigate('/');
+      await dispatch(loginUser({ email, password })).unwrap();
+      navigate(redirectPath, { replace: true });
     } catch (error) {
       setFormError(error instanceof Error ? error.message : 'Failed to login account');
     }
   };
-
-  useEffect(() => {
-    if (user) {
-      navigate(from, { replace: true });
-    }
-  }, [user, navigate, from]);
 
   useEffect(() => {
     if (error) {

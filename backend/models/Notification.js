@@ -15,7 +15,9 @@ const notificationSchema = new mongoose.Schema({
   type: {
     type: String,
     enum: ['task_assigned', 'task_due', 'mention', 'project_invite', 
-           'deadline_approaching', 'task_completed', 'comment_reply'],
+           'deadline_approaching', 'task_completed', 'comment_reply',
+           'team_join_request', 'team_join_accepted', 'team_join_rejected',
+           'team_member_kicked', 'team_deleted', 'manager_account_deleted'],
     required: true
   },
   title: {
@@ -40,6 +42,18 @@ const notificationSchema = new mongoose.Schema({
   relatedTask: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Task'
+  },
+  relatedTeam: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Team'
+  },
+  requestingUser: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User'
+  },
+  joinRequest: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'TeamInvitation'
   },
   createdAt: {
     type: Date,

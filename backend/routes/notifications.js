@@ -10,13 +10,23 @@ router.use(protect);
 
 // Get user notifications
 router.get('/', asyncHandler(async (req, res) => {
-  const notifications = await Notification.find({ recipient: req.user.id })
+  const notifications = await Notification.find({
+    recipient: req.user.id,
+    tenantId: req.tenantId
+  })
     .populate('relatedProject', 'name')
     .populate('relatedTask', 'title')
+    .populate('relatedTeam', 'name')
+    .populate('requestingUser', 'name email avatar')
+    .populate('joinRequest')
     .sort('-createdAt')
     .limit(50);
 
-  const unreadCount = notifications.filter(n => !n.isRead).length;
+  const unreadCount = await Notification.countDocuments({
+    recipient: req.user.id,
+    tenantId: req.tenantId,
+    isRead: false
+  });
 
   res.status(200).json({
     success: true,
@@ -30,7 +40,8 @@ router.get('/', asyncHandler(async (req, res) => {
 router.put('/:id/read', asyncHandler(async (req, res) => {
   const notification = await Notification.findOne({
     _id: req.params.id,
-    recipient: req.user.id
+    recipient: req.user.id,
+    tenantId: req.tenantId
   });
 
   if (!notification) {
@@ -51,7 +62,7 @@ router.put('/:id/read', asyncHandler(async (req, res) => {
 // Mark all notifications as read
 router.put('/read-all', asyncHandler(async (req, res) => {
   await Notification.updateMany(
-    { recipient: req.user.id, isRead: false },
+    { recipient: req.user.id, tenantId: req.tenantId, isRead: false },
     { isRead: true }
   );
 
@@ -65,7 +76,8 @@ router.put('/read-all', asyncHandler(async (req, res) => {
 router.delete('/:id', asyncHandler(async (req, res) => {
   const notification = await Notification.findOneAndDelete({
     _id: req.params.id,
-    recipient: req.user.id
+    recipient: req.user.id,
+    tenantId: req.tenantId
   });
 
   if (!notification) {
@@ -83,7 +95,10 @@ router.delete('/:id', asyncHandler(async (req, res) => {
 
 // Clear all notifications
 router.delete('/', asyncHandler(async (req, res) => {
-  await Notification.deleteMany({ recipient: req.user.id });
+  await Notification.deleteMany({
+    recipient: req.user.id,
+    tenantId: req.tenantId
+  });
 
   res.status(200).json({
     success: true,

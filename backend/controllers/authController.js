@@ -1,5 +1,8 @@
 // controllers/authController.js
 const User = require('../models/User');
+const Team = require('../models/Team');
+const TeamInvitation = require('../models/TeamInvitation');
+const Notification = require('../models/Notification');
 const asyncHandler = require('../utils/asyncHandler');
 const ErrorResponse = require('../utils/errorResponse');
 const crypto = require('crypto');
@@ -11,24 +14,21 @@ const generateTenantId = () => {
 
 // Generate unique TaskFlow ID (like social media username)
 const generateTaskflowId = async (name) => {
-  // Create base ID from name (slugify: lowercase, replace spaces with underscore)
   const baseId = name
     .toLowerCase()
     .trim()
     .replace(/\s+/g, '_')
     .replace(/[^a-z0-9_]/g, '')
-    .substring(0, 20); // Limit to 20 chars
+    .substring(0, 20);
 
   let taskflowId = baseId;
   let counter = 1;
 
-  // Check if ID exists, if so add random suffix
   while (await User.findOne({ taskflowId })) {
     const suffix = Math.floor(Math.random() * 10000);
     taskflowId = `${baseId}_${suffix}`;
     counter++;
     if (counter > 10) {
-      // Fallback: use completely random ID
       taskflowId = `user_${crypto.randomBytes(6).toString('hex')}`;
       break;
     }
@@ -39,31 +39,38 @@ const generateTaskflowId = async (name) => {
 
 // Register user
 exports.register = asyncHandler(async (req, res, next) => {
-  const { name, email, password, role = 'manager', companyName } = req.body;
+  const { name, email, password, role = 'user', companyName } = req.body;
+  const normalizedEmail = (email || '').toLowerCase().trim();
+  const normalizedCompanyName = (companyName || '').trim();
+  const isEmailLike = (value) => /^\S+@\S+\.\S+$/.test(value);
 
-  // Generate unique TaskFlow ID
   const taskflowId = await generateTaskflowId(name);
 
   let tenantId;
-  
   if (role === 'manager') {
-    if (!companyName) {
+    if (!normalizedCompanyName) {
       return next(new ErrorResponse('Company name is required for managers', 400));
     }
-    // For managers: use companyName as basis for tenantId
+
+    if (
+      normalizedCompanyName.toLowerCase() === normalizedEmail ||
+      isEmailLike(normalizedCompanyName)
+    ) {
+      return next(new ErrorResponse('Enter a valid company name (not an email address)', 400));
+    }
+
     tenantId = crypto
       .createHash('sha256')
-      .update(companyName.toLowerCase().trim())
+      .update(normalizedCompanyName.toLowerCase())
       .digest('hex')
       .substring(0, 24);
-    console.log(`✅ Manager ${taskflowId} - tenantId: ${tenantId} (based on company: ${companyName})`);
+
+    console.log(`Manager ${taskflowId} tenantId ${tenantId} (company: ${normalizedCompanyName})`);
   } else {
-    // For users: use a default tenant until they are added to a company team
     tenantId = 'default_user_tenant';
-    console.log(`✅ User ${taskflowId} - tenantId: ${tenantId} (default, will be updated when added to team)`);
+    console.log(`User ${taskflowId} tenantId ${tenantId} (default)`);
   }
 
-  // Create user with specified role, tenant ID, and TaskFlow ID
   const user = await User.create({
     name,
     email,
@@ -71,7 +78,7 @@ exports.register = asyncHandler(async (req, res, next) => {
     role,
     tenantId,
     taskflowId,
-    companyName
+    companyName: role === 'manager' ? normalizedCompanyName : null
   });
 
   sendTokenResponse(user, 201, res);
@@ -81,19 +88,15 @@ exports.register = asyncHandler(async (req, res, next) => {
 exports.login = asyncHandler(async (req, res, next) => {
   const { email, password } = req.body;
 
-  // Validate email
   if (!email) {
     return next(new ErrorResponse('Please provide an email', 400));
   }
 
-  // Check for user
   let user = await User.findOne({ email }).select('+password');
-
   if (!user) {
     return next(new ErrorResponse('Invalid credentials', 401));
   }
 
-  // For existing users, check password
   if (password && user.role !== 'user') {
     const isMatch = await user.matchPassword(password);
     if (!isMatch) {
@@ -101,7 +104,6 @@ exports.login = asyncHandler(async (req, res, next) => {
     }
   }
 
-  // Update last login
   user.lastLogin = Date.now();
   await user.save();
 
@@ -143,7 +145,6 @@ exports.updateDetails = asyncHandler(async (req, res, next) => {
 exports.updatePassword = asyncHandler(async (req, res, next) => {
   const user = await User.findById(req.user.id).select('+password');
 
-  // Check current password
   if (!(await user.matchPassword(req.body.currentPassword))) {
     return next(new ErrorResponse('Password is incorrect', 401));
   }
@@ -162,9 +163,148 @@ exports.logout = asyncHandler(async (req, res, next) => {
   });
 });
 
-// Get token from model, create cookie and send response
+// Delete own account permanently
+exports.deleteAccount = asyncHandler(async (req, res, next) => {
+  const user = await User.findById(req.user.id);
+  if (!user) {
+    return next(new ErrorResponse('User not found', 404));
+  }
+
+  const ownedTeams = await Team.find({
+    owner: user._id,
+    tenantId: user.tenantId
+  }).select('_id name members');
+
+  const ownedTeamIds = ownedTeams.map(team => team._id);
+  const affectedMembers = [];
+  const notificationsToCreate = [];
+
+  ownedTeams.forEach((team) => {
+    team.members.forEach((member) => {
+      const memberId = member.user?.toString();
+      if (memberId && memberId !== user._id.toString()) {
+        affectedMembers.push(memberId);
+        notificationsToCreate.push({
+          recipient: memberId,
+          tenantId: user.tenantId,
+          type: 'manager_account_deleted',
+          title: 'Manager Account Deleted',
+          message: 'Your manager deleted their account. Your team was removed.',
+          link: '/team',
+          relatedTeam: team._id
+        });
+      }
+    });
+  });
+
+  if (notificationsToCreate.length > 0) {
+    await Notification.insertMany(notificationsToCreate);
+  }
+
+  if (ownedTeamIds.length > 0) {
+    await User.updateMany(
+      { _id: { $in: [...new Set(affectedMembers)] } },
+      {
+        $pull: { teams: { $in: ownedTeamIds } },
+        $set: { companyName: null }
+      }
+    );
+
+    await TeamInvitation.deleteMany({ team: { $in: ownedTeamIds } });
+    await Team.deleteMany({ _id: { $in: ownedTeamIds } });
+  }
+
+  // Remove user from teams where they are only a member.
+  await Team.updateMany(
+    { 'members.user': user._id },
+    { $pull: { members: { user: user._id } } }
+  );
+
+  await TeamInvitation.deleteMany({
+    $or: [{ invitedUser: user._id }, { invitedBy: user._id }]
+  });
+
+  await Notification.deleteMany({
+    $or: [{ recipient: user._id }, { requestingUser: user._id }]
+  });
+
+  await User.deleteOne({ _id: user._id });
+
+  res.status(200).json({
+    success: true,
+    message: 'Account deleted permanently'
+  });
+});
+
+// Delete company (owner only)
+exports.deleteCompany = asyncHandler(async (req, res, next) => {
+  const user = await User.findById(req.user.id);
+  if (!user) {
+    return next(new ErrorResponse('User not found', 404));
+  }
+
+  if (user.role !== 'manager' && user.role !== 'admin') {
+    return next(new ErrorResponse('Only company owner can delete company', 403));
+  }
+
+  const ownedTeams = await Team.find({
+    owner: user._id,
+    tenantId: user.tenantId
+  }).select('_id name members');
+
+  const ownedTeamIds = ownedTeams.map(team => team._id);
+  const affectedMembers = [];
+  const notificationsToCreate = [];
+
+  ownedTeams.forEach((team) => {
+    team.members.forEach((member) => {
+      const memberId = member.user?.toString();
+      if (memberId && memberId !== user._id.toString()) {
+        affectedMembers.push(memberId);
+        notificationsToCreate.push({
+          recipient: memberId,
+          tenantId: user.tenantId,
+          type: 'team_deleted',
+          title: 'Company Deleted',
+          message: 'Your company owner deleted the company. Your team was removed.',
+          link: '/team',
+          relatedTeam: team._id
+        });
+      }
+    });
+  });
+
+  if (notificationsToCreate.length > 0) {
+    await Notification.insertMany(notificationsToCreate);
+  }
+
+  if (ownedTeamIds.length > 0) {
+    await User.updateMany(
+      { _id: { $in: [...new Set(affectedMembers)] } },
+      {
+        $pull: { teams: { $in: ownedTeamIds } },
+        $set: { companyName: null }
+      }
+    );
+
+    await TeamInvitation.deleteMany({ team: { $in: ownedTeamIds } });
+    await Team.deleteMany({ _id: { $in: ownedTeamIds } });
+  }
+
+  user.companyName = null;
+  user.teams = (user.teams || []).filter(teamId =>
+    !ownedTeamIds.some(ownedId => ownedId.toString() === teamId.toString())
+  );
+  await user.save();
+
+  res.status(200).json({
+    success: true,
+    message: 'Company deleted successfully'
+  });
+});
+
+// Get token from model and send response
 const sendTokenResponse = (user, statusCode, res) => {
-  // Create token
   const token = user.getSignedJwtToken();
 
   const options = {
@@ -188,10 +328,10 @@ const sendTokenResponse = (user, statusCode, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        companyName: user.companyName,
         tenantId: user.tenantId,
         taskflowId: user.taskflowId,
         preferences: user.preferences
       }
     });
 };
-

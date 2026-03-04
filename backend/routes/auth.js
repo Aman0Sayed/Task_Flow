@@ -9,5 +9,7 @@ router.post('/login', authController.login);
 
 // Protected routes
 router.get('/verify', protect, authController.getMe);
+router.delete('/account', protect, authController.deleteAccount);
+router.delete('/company', protect, authController.deleteCompany);
 
 module.exports = router;

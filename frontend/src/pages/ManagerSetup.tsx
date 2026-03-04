@@ -36,6 +36,17 @@ function ManagerSetup() {
       return;
     }
 
+    const normalizedCompanyName = formData.companyName.trim();
+    const normalizedEmail = formData.email.trim().toLowerCase();
+    const isEmailLike = /^\S+@\S+\.\S+$/.test(normalizedCompanyName);
+    if (
+      normalizedCompanyName.toLowerCase() === normalizedEmail ||
+      isEmailLike
+    ) {
+      setFormError('Enter a valid company name (not an email address)');
+      return;
+    }
+
     if (formData.password !== formData.confirmPassword) {
       setFormError('Passwords do not match');
       return;
@@ -51,7 +62,7 @@ function ManagerSetup() {
         name: formData.name,
         email: formData.email,
         password: formData.password,
-        companyName: formData.companyName,
+        companyName: normalizedCompanyName,
         role: 'manager'
       }));
       navigate('/');
@@ -136,6 +147,7 @@ function ManagerSetup() {
                     <input
                       id="email"
                       name="email"
+                      autoComplete="email"
                       type="email"
                       value={formData.email}
                       onChange={handleChange}
@@ -158,6 +170,7 @@ function ManagerSetup() {
                     <input
                       id="companyName"
                       name="companyName"
+                      autoComplete="organization"
                       type="text"
                       value={formData.companyName}
                       onChange={handleChange}

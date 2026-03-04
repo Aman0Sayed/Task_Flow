@@ -53,8 +53,22 @@ function SignupForm() {
       return false;
     }
 
-    if (role === 'manager' && !formData.companyName) {
+    const normalizedCompanyName = (formData.companyName || '').trim();
+    const normalizedEmail = (formData.email || '').trim().toLowerCase();
+    const isEmailLike = (value: string) => /^\S+@\S+\.\S+$/.test(value);
+
+    if (role === 'manager' && !normalizedCompanyName) {
       setFormError('Company name is required for managers');
+      return false;
+    }
+    if (
+      role === 'manager' &&
+      (
+        normalizedCompanyName.toLowerCase() === normalizedEmail ||
+        isEmailLike(normalizedCompanyName)
+      )
+    ) {
+      setFormError('Enter a valid company name (not an email address)');
       return false;
     }
     
@@ -70,7 +84,13 @@ function SignupForm() {
     }
 
     try {
-      const registerData: any = {
+      const registerData: {
+        name: string;
+        email: string;
+        password: string;
+        role: 'user' | 'manager';
+        companyName?: string;
+      } = {
         name: formData.name,
         email: formData.email,
         password: formData.password,
@@ -78,13 +98,19 @@ function SignupForm() {
       };
 
       if (role === 'manager' && formData.companyName) {
-        registerData.companyName = formData.companyName;
+        registerData.companyName = formData.companyName.trim();
       }
 
       await dispatch(registerUser(registerData)).unwrap();
       navigate('/'); // Go to root, which is dashboard for authenticated users
-    } catch {
-      setFormError(error || 'Failed to create account');
+    } catch (err) {
+      const message =
+        typeof err === 'string'
+          ? err
+          : err instanceof Error
+          ? err.message
+          : (error || 'Failed to create account');
+      setFormError(message);
     }
   };
 
@@ -172,6 +198,8 @@ function SignupForm() {
             </div>
             <input
               id="email"
+              name="email"
+              autoComplete="email"
               type="email"
               value={formData.email}
               onChange={handleChange}
@@ -194,6 +222,8 @@ function SignupForm() {
               </div>
               <input
                 id="companyName"
+                name="companyName"
+                autoComplete="organization"
                 type="text"
                 value={formData.companyName}
                 onChange={handleChange}

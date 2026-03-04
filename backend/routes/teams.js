@@ -20,7 +20,7 @@ router.get('/', asyncHandler(async (req, res) => {
       { 'members.user': req.user.id }
     ]
   })
-  .populate('owner', 'name email avatar')
+  .populate('owner', 'name email avatar companyName')
   .populate('members.user', 'name email avatar')
   .populate('projects', 'name status')
   .sort('-createdAt');
@@ -32,13 +32,16 @@ router.get('/', asyncHandler(async (req, res) => {
   });
 }));
 
+// Get all teams (for browsing)
+router.get('/all', teamController.getAllTeams);
+
 // Get single team
 router.get('/:id', asyncHandler(async (req, res, next) => {
   const team = await Team.findOne({
     _id: req.params.id,
     tenantId: req.tenantId
   })
-    .populate('owner', 'name email avatar')
+    .populate('owner', 'name email avatar companyName')
     .populate('members.user', 'name email avatar')
     .populate('projects', 'name status progress');
 
@@ -63,6 +66,9 @@ router.get('/:id', asyncHandler(async (req, res, next) => {
 // Create new team
 // Create team
 router.post('/', teamController.createTeam);
+
+// Rename team (owner/manager only)
+router.put('/:id/rename', teamController.renameTeam);
 
 // Update team
 router.put('/:id', asyncHandler(async (req, res, next) => {
@@ -96,34 +102,7 @@ router.put('/:id', asyncHandler(async (req, res, next) => {
 }));
 
 // Delete team
-router.delete('/:id', asyncHandler(async (req, res, next) => {
-  const team = await Team.findOne({
-    _id: req.params.id,
-    tenantId: req.tenantId
-  });
-
-  if (!team) {
-    return next(new ErrorResponse(`Team not found with id of ${req.params.id}`, 404));
-  }
-
-  // Check if user is owner
-  if (!team.owner.equals(req.user.id)) {
-    return next(new ErrorResponse('Only team owner can delete the team', 403));
-  }
-
-  await team.remove();
-
-  // Remove team from all members
-  await User.updateMany(
-    { teams: team._id },
-    { $pull: { teams: team._id } }
-  );
-
-  res.status(200).json({
-    success: true,
-    data: {}
-  });
-}));
+router.delete('/:id', teamController.deleteTeam);
 
 // Join team with invite code
 router.post('/join', asyncHandler(async (req, res, next) => {
@@ -149,11 +128,16 @@ router.post('/join', asyncHandler(async (req, res, next) => {
   });
   await team.save();
 
-  // Add team to user
-  await User.findByIdAndUpdate(req.user.id, {
+  // Add team to user and update tenant/company details.
+  const teamOwner = await User.findById(team.owner).select('companyName');
+  const userUpdate = {
     $push: { teams: team._id },
-    tenantId: team.tenantId  // Update user's tenantId to match the team's tenant
-  });
+    tenantId: team.tenantId
+  };
+  if (teamOwner?.companyName) {
+    userUpdate.companyName = teamOwner.companyName;
+  }
+  await User.findByIdAndUpdate(req.user.id, userUpdate);
 
   res.status(200).json({
     success: true,
@@ -230,6 +214,9 @@ router.put('/:id/members/:userId', asyncHandler(async (req, res, next) => {
   });
 }));
 
+// Remove member (kick)
+router.delete('/:id/members/:userId', teamController.removeMember);
+
 // Add member
 router.post('/:id/add-member', teamController.addMember);
 
@@ -241,6 +228,18 @@ router.put('/invitations/:id/accept', teamController.acceptInvitation);
 
 // Reject team invitation
 router.put('/invitations/:id/reject', teamController.rejectInvitation);
+
+// Request to join team
+router.post('/:id/join-request', teamController.requestJoinTeam);
+
+// Get join requests for team
+router.get('/:id/join-requests', teamController.getJoinRequests);
+
+// Accept join request
+router.put('/:id/join-requests/:requestId/accept', teamController.acceptJoinRequest);
+
+// Reject join request
+router.put('/:id/join-requests/:requestId/reject', teamController.rejectJoinRequest);
 
 module.exports = router;
 

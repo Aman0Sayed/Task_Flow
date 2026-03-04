@@ -4,6 +4,7 @@ const User = require('../models/User');
 const Project = require('../models/Project');
 const Activity = require('../models/Activity');
 const TeamInvitation = require('../models/TeamInvitation');
+const Notification = require('../models/Notification');
 const asyncHandler = require('../utils/asyncHandler');
 const ErrorResponse = require('../utils/errorResponse');
 const bcrypt = require('bcryptjs');
@@ -37,12 +38,41 @@ const generateTaskflowId = async (name) => {
   return taskflowId;
 };
 
-// Get all teams
-exports.getTeams = asyncHandler(async (req, res, next) => {
-  const teams = await Team.find({ tenantId: req.tenantId })
-  .populate('owner', 'name email avatar')
-  .populate('members.user', 'name email avatar')
-  .sort('-createdAt');
+// Get all teams (for browsing and joining)
+exports.getAllTeams = asyncHandler(async (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ success: false, message: 'Not authenticated' });
+  }
+
+  const currentUserId = req.user._id || req.user.id;
+
+  // Exclude teams already owned/joined by the current user.
+  const allTeams = await Team.find({
+    owner: { $ne: currentUserId },
+    members: { $not: { $elemMatch: { user: currentUserId } } }
+  })
+    .populate('owner', 'name email avatar companyName')
+    .populate('members.user', 'name email avatar')
+    .select('name description owner members createdAt tenantId')
+    .sort('-createdAt');
+
+  // Ignore orphaned teams with deleted owners.
+  const validTeams = allTeams.filter(team => team.owner);
+
+  // Keep teams visible even when a join request is pending; UI can show disabled action.
+  const pendingRequests = await TeamInvitation.find({
+    invitedUser: req.user.id,
+    status: 'pending',
+    $expr: { $eq: ['$invitedBy', '$invitedUser'] },
+    ...(validTeams.length > 0 ? { team: { $in: validTeams.map(team => team._id) } } : {})
+  }).select('team');
+
+  const pendingTeamIds = new Set(pendingRequests.map(r => r.team.toString()));
+
+  const teams = validTeams.map(team => ({
+    ...team.toObject(),
+    hasPendingRequest: pendingTeamIds.has(team._id.toString())
+  }));
 
   res.status(200).json({
     success: true,
@@ -130,6 +160,37 @@ exports.updateTeam = asyncHandler(async (req, res, next) => {
   });
 });
 
+// Rename team (owner/manager only)
+exports.renameTeam = asyncHandler(async (req, res, next) => {
+  const { name } = req.body;
+  const trimmedName = (name || '').trim();
+
+  if (!trimmedName) {
+    return next(new ErrorResponse('Team name is required', 400));
+  }
+
+  let team = await Team.findOne({
+    _id: req.params.id,
+    tenantId: req.tenantId
+  });
+
+  if (!team) {
+    return next(new ErrorResponse(`Team not found with id of ${req.params.id}`, 404));
+  }
+
+  if (!team.owner.equals(req.user.id)) {
+    return next(new ErrorResponse('Only team owner can rename the team', 403));
+  }
+
+  team.name = trimmedName;
+  await team.save();
+
+  res.status(200).json({
+    success: true,
+    data: team
+  });
+});
+
 // Delete team
 exports.deleteTeam = asyncHandler(async (req, res, next) => {
   const team = await Team.findOne({
@@ -146,13 +207,34 @@ exports.deleteTeam = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse('Only team owner can delete the team', 403));
   }
 
-  await team.deleteOne();
+  const affectedMemberIds = team.members
+    .map(member => member.user?.toString())
+    .filter(memberId => memberId && memberId !== req.user.id.toString());
+
+  if (affectedMemberIds.length > 0) {
+    await Notification.insertMany(
+      affectedMemberIds.map((memberId) => ({
+        recipient: memberId,
+        tenantId: req.tenantId,
+        type: 'team_deleted',
+        title: 'Team Deleted',
+        message: `The team "${team.name}" was deleted by the manager.`,
+        link: '/team',
+        relatedTeam: team._id
+      }))
+    );
+  }
 
   // Remove team from all users
   await User.updateMany(
     { teams: team._id },
     { $pull: { teams: team._id } }
   );
+
+  // Remove team-bound join/invitation records
+  await TeamInvitation.deleteMany({ team: team._id });
+
+  await team.deleteOne();
 
   res.status(200).json({
     success: true,
@@ -302,12 +384,18 @@ exports.removeMember = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse(`Team not found with id of ${req.params.id}`, 404));
   }
 
-  // Check authorization
-  const isAuthorized = team.owner.equals(req.user.id) || 
-                      team.members.some(m => m.user.equals(req.user.id) && m.role === 'admin');
+  // Restrict kicking to team owner (manager flow).
+  if (!team.owner.equals(req.user.id)) {
+    return next(new ErrorResponse('Only team owner can remove members', 403));
+  }
 
-  if (!isAuthorized) {
-    return next(new ErrorResponse('Not authorized to remove members', 403));
+  if (team.owner.equals(req.params.userId)) {
+    return next(new ErrorResponse('Team owner cannot be removed', 400));
+  }
+
+  const isTargetMember = team.members.some(member => member.user.equals(req.params.userId));
+  if (!isTargetMember) {
+    return next(new ErrorResponse('Member not found in team', 404));
   }
 
   // Remove member
@@ -317,6 +405,16 @@ exports.removeMember = asyncHandler(async (req, res, next) => {
   // Remove team from user
   await User.findByIdAndUpdate(req.params.userId, {
     $pull: { teams: team._id }
+  });
+
+  await Notification.create({
+    recipient: req.params.userId,
+    tenantId: req.tenantId,
+    type: 'team_member_kicked',
+    title: 'Removed From Team',
+    message: 'You have been removed from the team.',
+    link: '/team',
+    relatedTeam: team._id
   });
 
   res.status(200).json({
@@ -462,11 +560,16 @@ exports.acceptInvitation = asyncHandler(async (req, res, next) => {
       await team.save();
     }
 
-    // Add team to user and update tenantId
-    await User.findByIdAndUpdate(req.user.id, {
+    // Add team to user and update tenant/company details.
+    const teamOwner = await User.findById(team.owner).select('companyName');
+    const userUpdate = {
       $push: { teams: team._id },
       tenantId: team.tenantId
-    });
+    };
+    if (teamOwner?.companyName) {
+      userUpdate.companyName = teamOwner.companyName;
+    }
+    await User.findByIdAndUpdate(req.user.id, userUpdate);
   }
 
   res.status(200).json({
@@ -496,6 +599,307 @@ exports.rejectInvitation = asyncHandler(async (req, res, next) => {
   res.status(200).json({
     success: true,
     data: invitation
+  });
+});
+
+// Request to join team (creates notification for managers)
+exports.requestJoinTeam = asyncHandler(async (req, res, next) => {
+  console.log('requestJoinTeam: User:', req.user.id, 'Team:', req.params.id);
+  
+  const team = await Team.findById(req.params.id)
+    .populate('owner', 'name email')
+    .populate('members.user', 'name email');
+
+  if (!team) {
+    console.log('requestJoinTeam: Team not found');
+    return next(new ErrorResponse(`Team not found with id of ${req.params.id}`, 404));
+  }
+
+  console.log('requestJoinTeam: Team found, owner:', team.owner._id, 'members:', team.members.length);
+
+  // Check if user is already a member
+  const isMember = team.members.some(member => member.user && member.user._id.equals(req.user.id));
+  console.log('requestJoinTeam: isMember:', isMember);
+  if (isMember) {
+    console.log('requestJoinTeam: User is already a member');
+    return next(new ErrorResponse('You are already a member of this team', 400));
+  }
+
+  // Check if there's already a pending request (we'll use TeamInvitation with a special status)
+  // const existingRequest = await TeamInvitation.findOne({
+  //   team: req.params.id,
+  //   invitedUser: req.user.id,
+  //   status: 'pending',
+  //   invitedBy: req.user.id // Self-invitation indicates a join request
+  // });
+  
+  // console.log('requestJoinTeam: existingRequest:', !!existingRequest);
+  // if (existingRequest) {
+  //   console.log('requestJoinTeam: Already has pending request');
+  //   return next(new ErrorResponse('You already have a pending join request for this team', 400));
+  // }
+
+  console.log('requestJoinTeam: Creating join request');
+  const joinRequest = await TeamInvitation.create({
+    team: req.params.id,
+    invitedUser: req.user.id,
+    invitedBy: req.user.id, // Self-invitation
+    role: 'member', // Default role
+    tenantId: team.tenantId, // Use team's tenant
+    status: 'pending'
+  });
+
+  // Create notifications for team managers (owner and admins)
+  const Notification = require('../models/Notification');
+  const toUserId = (value) => {
+    if (!value) return null;
+    if (typeof value === 'string') return value;
+    if (value._id) return value._id.toString();
+    if (typeof value.toString === 'function') return value.toString();
+    return null;
+  };
+
+  const managerIds = [toUserId(team.owner)];
+
+  // Add admin and lead members
+  team.members.forEach(member => {
+    if (member.role === 'admin' || member.role === 'lead') {
+      managerIds.push(toUserId(member.user));
+    }
+  });
+
+  // Remove duplicates
+  const uniqueManagerIds = [...new Set(managerIds.filter(Boolean))];
+
+  // Create notifications for each manager
+  const notifications = uniqueManagerIds.map(managerId => ({
+    recipient: managerId,
+    tenantId: team.tenantId, // Use team's tenant
+    type: 'team_join_request',
+    title: 'Team Join Request',
+    message: `${req.user.name} has requested to join ${team.name}`,
+    link: `/teams/${team._id}`,
+    relatedTeam: team._id,
+    requestingUser: req.user.id,
+    joinRequest: joinRequest._id
+  }));
+
+  await Notification.insertMany(notifications);
+
+  res.status(200).json({
+    success: true,
+    message: 'Join request sent successfully',
+    data: joinRequest
+  });
+});
+
+// Get join requests for team managers
+exports.getJoinRequests = asyncHandler(async (req, res, next) => {
+  const team = await Team.findOne({
+    _id: req.params.id,
+    tenantId: req.tenantId
+  });
+
+  if (!team) {
+    return next(new ErrorResponse(`Team not found with id of ${req.params.id}`, 404));
+  }
+
+  // Check if user is authorized to view requests (owner or admin/lead)
+  const isAuthorized = team.owner.equals(req.user.id) ||
+                      team.members.some(m => m.user.equals(req.user.id) &&
+                      (m.role === 'admin' || m.role === 'lead'));
+
+  if (!isAuthorized) {
+    return next(new ErrorResponse('Not authorized to view join requests', 403));
+  }
+
+  // Get pending join requests (where invitedBy equals invitedUser - self requests)
+  const joinRequests = await TeamInvitation.find({
+    team: req.params.id,
+    status: 'pending',
+    $expr: { $eq: ['$invitedBy', '$invitedUser'] } // Self-invitations
+  })
+  .populate('invitedUser', 'name email avatar')
+  .populate('invitedBy', 'name email')
+  .sort('-invitedAt');
+
+  res.status(200).json({
+    success: true,
+    count: joinRequests.length,
+    data: joinRequests
+  });
+});
+
+// Accept join request
+exports.acceptJoinRequest = asyncHandler(async (req, res, next) => {
+  const joinRequest = await TeamInvitation.findById(req.params.requestId);
+
+  if (!joinRequest) {
+    return next(new ErrorResponse('Join request not found', 404));
+  }
+
+  // Join requests are self-invitations (invitedBy === invitedUser)
+  if (joinRequest.invitedBy.toString() !== joinRequest.invitedUser.toString()) {
+    return next(new ErrorResponse('Join request not found', 404));
+  }
+
+  const team = await Team.findOne({
+    _id: joinRequest.team,
+    tenantId: req.tenantId
+  });
+
+  if (!team) {
+    return next(new ErrorResponse('Team not found', 404));
+  }
+
+  // Check authorization
+  const isAuthorized = team.owner.equals(req.user.id) ||
+                      team.members.some(m => m.user.equals(req.user.id) &&
+                      (m.role === 'admin' || m.role === 'lead'));
+
+  if (!isAuthorized) {
+    return next(new ErrorResponse('Not authorized to accept join requests', 403));
+  }
+
+  const Notification = require('../models/Notification');
+
+  // Idempotent response: request already handled earlier.
+  if (joinRequest.status !== 'pending') {
+    await Notification.deleteMany({
+      type: 'team_join_request',
+      joinRequest: joinRequest._id
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `Join request already ${joinRequest.status}`,
+      data: joinRequest
+    });
+  }
+
+  // Update request status
+  joinRequest.status = 'accepted';
+  joinRequest.respondedAt = new Date();
+  await joinRequest.save();
+
+  // Add user to team
+  const isMember = team.members.some(member => member.user.equals(joinRequest.invitedUser));
+  if (!isMember) {
+    team.members.push({
+      user: joinRequest.invitedUser,
+      role: joinRequest.role
+    });
+    await team.save();
+  }
+
+  // Add team to user and update tenant/company details.
+  const teamOwner = await User.findById(team.owner).select('companyName');
+  const userUpdate = {
+    $push: { teams: team._id },
+    tenantId: team.tenantId
+  };
+  if (teamOwner?.companyName) {
+    userUpdate.companyName = teamOwner.companyName;
+  }
+  await User.findByIdAndUpdate(joinRequest.invitedUser, userUpdate);
+
+  // Create notification for the requesting user
+  await Notification.create({
+    recipient: joinRequest.invitedUser,
+    tenantId: req.tenantId,
+    type: 'team_join_accepted',
+    title: 'Join Request Accepted',
+    message: `Your request to join ${team.name} has been accepted`,
+    link: `/teams/${team._id}`,
+    relatedTeam: team._id
+  });
+
+  // Remove manager-side pending join request notifications once handled.
+  await Notification.deleteMany({
+    type: 'team_join_request',
+    joinRequest: joinRequest._id
+  });
+
+  res.status(200).json({
+    success: true,
+    message: 'Join request accepted',
+    data: joinRequest
+  });
+});
+
+// Reject join request
+exports.rejectJoinRequest = asyncHandler(async (req, res, next) => {
+  const joinRequest = await TeamInvitation.findById(req.params.requestId);
+
+  if (!joinRequest) {
+    return next(new ErrorResponse('Join request not found', 404));
+  }
+
+  // Join requests are self-invitations (invitedBy === invitedUser)
+  if (joinRequest.invitedBy.toString() !== joinRequest.invitedUser.toString()) {
+    return next(new ErrorResponse('Join request not found', 404));
+  }
+
+  const team = await Team.findOne({
+    _id: joinRequest.team,
+    tenantId: req.tenantId
+  });
+
+  if (!team) {
+    return next(new ErrorResponse('Team not found', 404));
+  }
+
+  // Check authorization
+  const isAuthorized = team.owner.equals(req.user.id) ||
+                      team.members.some(m => m.user.equals(req.user.id) &&
+                      (m.role === 'admin' || m.role === 'lead'));
+
+  if (!isAuthorized) {
+    return next(new ErrorResponse('Not authorized to reject join requests', 403));
+  }
+
+  const Notification = require('../models/Notification');
+
+  // Idempotent response: request already handled earlier.
+  if (joinRequest.status !== 'pending') {
+    await Notification.deleteMany({
+      type: 'team_join_request',
+      joinRequest: joinRequest._id
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: `Join request already ${joinRequest.status}`,
+      data: joinRequest
+    });
+  }
+
+  // Update request status
+  joinRequest.status = 'rejected';
+  joinRequest.respondedAt = new Date();
+  await joinRequest.save();
+
+  // Create notification for the requesting user
+  await Notification.create({
+    recipient: joinRequest.invitedUser,
+    tenantId: req.tenantId,
+    type: 'team_join_rejected',
+    title: 'Join Request Rejected',
+    message: `Your request to join ${team.name} has been rejected`,
+    link: `/teams/${team._id}`,
+    relatedTeam: team._id
+  });
+
+  // Remove manager-side pending join request notifications once handled.
+  await Notification.deleteMany({
+    type: 'team_join_request',
+    joinRequest: joinRequest._id
+  });
+
+  res.status(200).json({
+    success: true,
+    message: 'Join request rejected',
+    data: joinRequest
   });
 });
 

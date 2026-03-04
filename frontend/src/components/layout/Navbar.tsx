@@ -1,8 +1,8 @@
-import { ReactNode, useState } from 'react';
+import { ReactNode, useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { logout as logoutRedux } from '../../features/auth/authSlice';
-import { Bell, Search, UserCircle, Settings, HelpCircle, LogOut } from 'lucide-react';
+import { Bell, Search, UserCircle, Settings, HelpCircle, LogOut, Check, X } from 'lucide-react';
 import ThemeToggle from '../ui/ThemeToggle';
 import Avatar from '../ui/Avatar';
 import { cn } from '../../lib/utils';
@@ -17,7 +17,13 @@ export default function Navbar({ children }: NavbarProps) {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [processingJoinRequestId, setProcessingJoinRequestId] = useState<string | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [companyNameFallback, setCompanyNameFallback] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const user = useAppSelector((state) => state.auth.user);
+  const token = useAppSelector((state) => state.auth.token);
   const { logout } = useAuth();
   const navigate = useNavigate();
   const dispatch = useDispatch();
@@ -34,6 +40,179 @@ export default function Navbar({ children }: NavbarProps) {
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setSearchTerm(e.target.value);
   };
+
+  // Fetch notifications
+  const fetchNotifications = async () => {
+    try {
+      setLoading(true);
+      const token = localStorage.getItem('token');
+      const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
+      const res = await fetch(`${BASE_URL}/api/notifications`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setNotifications(data.data);
+        setUnreadCount(data.unreadCount);
+      }
+    } catch (error) {
+      console.error('Error fetching notifications:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Handle accept/reject team join request
+  const handleJoinRequest = async (notification: any, action: 'accept' | 'reject') => {
+    try {
+      if (processingJoinRequestId === notification._id) {
+        return;
+      }
+      setProcessingJoinRequestId(notification._id);
+
+      const token = localStorage.getItem('token');
+      const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const teamId = notification?.relatedTeam?._id || notification?.relatedTeam;
+      const requestId = notification?.joinRequest?._id || notification?.joinRequest;
+
+      if (!teamId || !requestId) {
+        // If payload is incomplete, remove stale notification from list.
+        setNotifications((prev) => prev.filter((n) => n._id !== notification._id));
+        setUnreadCount((prev) => Math.max(0, prev - (notification.isRead ? 0 : 1)));
+        return;
+      }
+      
+      const endpoint = action === 'accept' ? 'accept' : 'reject';
+      const res = await fetch(`${BASE_URL}/api/teams/${teamId}/join-requests/${requestId}/${endpoint}`, {
+        method: 'PUT',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+
+      if (res.ok || res.status === 404) {
+        // Optimistically remove the handled (or stale) join request notification.
+        setNotifications((prev) => prev.filter((n) => n._id !== notification._id));
+        setUnreadCount((prev) => Math.max(0, prev - (notification.isRead ? 0 : 1)));
+
+        // Best effort: remove notification from backend as well.
+        await fetch(`${BASE_URL}/api/notifications/${notification._id}`, {
+          method: 'DELETE',
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+
+        fetchNotifications();
+      }
+    } catch (error) {
+      console.error(`Error ${action}ing join request:`, error);
+    } finally {
+      setProcessingJoinRequestId(null);
+    }
+  };
+
+  // Mark notification as read
+  const markAsRead = async (notificationId: string) => {
+    try {
+      const token = localStorage.getItem('token');
+      const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
+      await fetch(`${BASE_URL}/api/notifications/${notificationId}/read`, {
+        method: 'PUT',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+
+      // Update local state
+      setNotifications(prev => 
+        prev.map(notif => 
+          notif._id === notificationId ? { ...notif, isRead: true } : notif
+        )
+      );
+      setUnreadCount(prev => Math.max(0, prev - 1));
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+    }
+  };
+
+  useEffect(() => {
+    if (user) {
+      fetchNotifications();
+    }
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    const intervalId = window.setInterval(() => {
+      fetchNotifications();
+    }, 10000);
+
+    return () => {
+      window.clearInterval(intervalId);
+    };
+  }, [user?.id]);
+
+  // Refresh notifications when dropdown opens
+  useEffect(() => {
+    if (showNotifications) {
+      fetchNotifications();
+    }
+  }, [showNotifications]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
+    const fetchCompanyNameFallback = async () => {
+      if (!user) {
+        setCompanyNameFallback(null);
+        return;
+      }
+
+      if (user.companyName) {
+        setCompanyNameFallback(null);
+        return;
+      }
+
+      const authToken = token || localStorage.getItem('token');
+      if (!authToken) {
+        return;
+      }
+
+      try {
+        const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+        const teamsRes = await fetch(`${BASE_URL}/api/teams`, {
+          headers: { Authorization: `Bearer ${authToken}` },
+        });
+
+        if (!teamsRes.ok) {
+          if (!isCancelled) setCompanyNameFallback(null);
+          return;
+        }
+
+        const teamsData = await teamsRes.json();
+        if (!isCancelled && teamsData.success && Array.isArray(teamsData.data) && teamsData.data.length > 0) {
+          const fallbackCompany = teamsData.data[0]?.owner?.companyName || teamsData.data[0]?.companyName || null;
+          setCompanyNameFallback(fallbackCompany);
+        } else if (!isCancelled) {
+          setCompanyNameFallback(null);
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          setCompanyNameFallback(null);
+        }
+        console.error('Error fetching company fallback:', error);
+      }
+    };
+
+    fetchCompanyNameFallback();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [token, user]);
+
+  const displayCompanyName = user?.companyName || companyNameFallback;
   
   return (
     <header className="sticky top-0 z-30 border-b border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">
@@ -64,7 +243,11 @@ export default function Navbar({ children }: NavbarProps) {
                 if (showUserMenu) setShowUserMenu(false);
               }}
             >
-              <span className="absolute right-1 top-1 flex h-2 w-2 rounded-full bg-red-500"></span>
+              {unreadCount > 0 && (
+                <span className="absolute -top-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-medium text-white">
+                  {unreadCount > 99 ? '99+' : unreadCount}
+                </span>
+              )}
               <Bell className="h-5 w-5 text-gray-700 dark:text-gray-300" />
             </button>
             
@@ -74,9 +257,73 @@ export default function Navbar({ children }: NavbarProps) {
                   <h3 className="text-sm font-semibold">Notifications</h3>
                 </div>
                 <div className="max-h-[calc(100vh-200px)] overflow-y-auto">
-                  <div className="p-4 text-center text-sm text-gray-500 dark:text-gray-400">
-                    No new notifications
-                  </div>
+                  {loading ? (
+                    <div className="p-4 text-center text-sm text-gray-500 dark:text-gray-400">
+                      Loading...
+                    </div>
+                  ) : notifications.length === 0 ? (
+                    <div className="p-4 text-center text-sm text-gray-500 dark:text-gray-400">
+                      No new notifications
+                    </div>
+                  ) : (
+                    <div className="divide-y divide-gray-200 dark:divide-gray-700">
+                      {notifications.slice(0, 10).map((notification) => (
+                        <div 
+                          key={notification._id} 
+                          className={cn(
+                            "p-3 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer",
+                            !notification.isRead && "bg-blue-50 dark:bg-blue-900/20"
+                          )}
+                          onClick={() => !notification.isRead && markAsRead(notification._id)}
+                        >
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                                {notification.title}
+                              </p>
+                              <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                                {notification.message}
+                              </p>
+                              {notification.type === 'team_join_request' && notification.joinRequest && (
+                                <div className="flex gap-2 mt-2">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleJoinRequest(notification, 'accept');
+                                    }}
+                                    disabled={processingJoinRequestId === notification._id}
+                                    className="inline-flex items-center px-2 py-1 text-xs font-medium text-green-700 bg-green-100 rounded-md hover:bg-green-200 dark:text-green-400 dark:bg-green-900/30"
+                                  >
+                                    <Check className="w-3 h-3 mr-1" />
+                                    {processingJoinRequestId === notification._id ? 'Processing...' : 'Accept'}
+                                  </button>
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleJoinRequest(notification, 'reject');
+                                    }}
+                                    disabled={processingJoinRequestId === notification._id}
+                                    className="inline-flex items-center px-2 py-1 text-xs font-medium text-red-700 bg-red-100 rounded-md hover:bg-red-200 dark:text-red-400 dark:bg-red-900/30"
+                                  >
+                                    <X className="w-3 h-3 mr-1" />
+                                    {processingJoinRequestId === notification._id ? 'Processing...' : 'Reject'}
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                            {!notification.isRead && (
+                              <div className="flex-shrink-0">
+                                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                              </div>
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                            {new Date(notification.createdAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div className="p-2 border-t dark:border-gray-700">
                   <Link 
@@ -93,6 +340,12 @@ export default function Navbar({ children }: NavbarProps) {
           <div className="border-r h-6 mx-1 border-gray-300 dark:border-gray-600" />
 
           <ThemeToggle />
+
+          {displayCompanyName && (
+            <div className="hidden lg:flex items-center rounded-full border border-gray-300 dark:border-gray-600 px-3 py-1 text-xs font-medium text-gray-700 dark:text-gray-300">
+              {displayCompanyName}
+            </div>
+          )}
 
           <div className="relative">
             <button
@@ -111,6 +364,11 @@ export default function Navbar({ children }: NavbarProps) {
                   <div className="border-b pb-2 pt-1 px-4 dark:border-gray-700">
                     <p className="text-sm font-medium">{user?.name || "User"}</p>
                     <p className="text-xs text-gray-500 dark:text-gray-400">{user?.email || ""}</p>
+                    {displayCompanyName && (
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                        {displayCompanyName}
+                      </p>
+                    )}
                   </div>
                   
                   <div className="py-1">

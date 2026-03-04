@@ -108,7 +108,7 @@ export default function Tasks() {
           className="btn btn-primary"
           onClick={() => isManager(user ?? undefined) && setIsNewTaskModalOpen(true)}
           disabled={!isManager(user ?? undefined)}
-          title={isManager(user ?? undefined) ? undefined : 'Only manager@gmail.com can create tasks'}
+          title={isManager(user ?? undefined) ? undefined : 'Only managers can create tasks'}
         >
           <Plus className="mr-1 h-4 w-4" />
           New Task

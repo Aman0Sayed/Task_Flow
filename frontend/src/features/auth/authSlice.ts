@@ -6,6 +6,7 @@ interface User {
   name: string;
   email: string;
   role: string;
+  companyName?: string | null;
   tenantId?: string;
   taskflowId?: string;
   preferences?: {
@@ -103,7 +104,11 @@ export const registerUser = createAsyncThunk<
     );
     return res.data;
   } catch (error: any) {
-    return rejectWithValue(error.response?.data?.message || 'An error occurred');
+    return rejectWithValue(
+      error.response?.data?.message ||
+      error.response?.data?.error ||
+      'An error occurred'
+    );
   }
 });
 
@@ -127,7 +132,11 @@ export const loginUser = createAsyncThunk<
     if (!error.response) {
       return rejectWithValue('Network error. Please try again.');
     }
-    return rejectWithValue(error.response.data.message || 'Login failed.');
+    return rejectWithValue(
+      error.response.data?.message ||
+      error.response.data?.error ||
+      'Login failed.'
+    );
   }
 });
 
@@ -153,6 +162,7 @@ const authSlice = createSlice({
         state.token = action.payload.token;
         state.isLoading = false;
         state.isAuthenticated = true;
+        localStorage.setItem('token', action.payload.token);
       })
       .addCase(registerUser.rejected, (state, action) => {
         state.isLoading = false;

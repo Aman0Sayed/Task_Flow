@@ -11,6 +11,9 @@ exports.getNotifications = asyncHandler(async (req, res, next) => {
   })
   .populate('relatedProject', 'name')
   .populate('relatedTask', 'title')
+  .populate('relatedTeam', 'name')
+  .populate('requestingUser', 'name email avatar')
+  .populate('joinRequest')
   .sort('-createdAt')
   .limit(parseInt(req.query.limit) || 50);
 
