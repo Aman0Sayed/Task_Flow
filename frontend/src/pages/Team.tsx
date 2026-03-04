@@ -160,7 +160,7 @@ const Team: React.FC = () => {
           <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Team Management</h1>
           <div className="flex gap-3">
             {teams.length > 0 ? (
-              canAddMembers(teams[0]) && (
+              !isManager(user ?? undefined) && canAddMembers(teams[0]) && (
                 <button
                   className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700"
                   onClick={() => setShowAddMember(true)}
