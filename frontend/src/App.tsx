@@ -13,6 +13,7 @@ import Settings from './pages/Settings';
 import Profile from './pages/Profile';
 import PublicProfile from './pages/PublicProfile';
 import Help from './pages/Help';
+import Documentation from './pages/Documentation';
 import KanbanBoard from './pages/KanbanBoard';
 import NotFound from './pages/NotFound';
 import Login from './pages/Login';
@@ -72,6 +73,7 @@ function App() {
             <Route path="settings" element={<Settings />} />
             <Route path="profile" element={<Profile />} />
             <Route path="help" element={<Help />} />
+            <Route path="documentation" element={<Documentation />} />
             <Route path="kanban" element={<KanbanBoard />} />
             <Route path="*" element={<NotFound />} />
           </Route>

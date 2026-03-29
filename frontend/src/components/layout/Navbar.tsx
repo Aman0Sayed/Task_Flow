@@ -2,7 +2,7 @@ import { ReactNode, useState, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
 import { logout as logoutRedux } from '../../features/auth/authSlice';
-import { Bell, Search, UserCircle, Settings, HelpCircle, LogOut, Check, X } from 'lucide-react';
+import { Bell, Search, UserCircle, Settings, HelpCircle, LogOut, Check, X, Book } from 'lucide-react';
 import ThemeToggle from '../ui/ThemeToggle';
 import Avatar from '../ui/Avatar';
 import { cn } from '../../lib/utils';
@@ -375,6 +375,7 @@ export default function Navbar({ children }: NavbarProps) {
                     {[
                       { icon: UserCircle, label: 'Profile', href: '/profile' },
                       { icon: Settings, label: 'Settings', href: '/settings' },
+                      { icon: Book, label: 'Documentation', href: '/documentation' },
                       { icon: HelpCircle, label: 'Help', href: '/help' },
                     ].map((item, i) => (
                       <Link
