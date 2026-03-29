@@ -75,14 +75,14 @@ export default function Sidebar({ closeSidebar }: SidebarProps) {
           <h3 className="mb-2 text-sm font-medium text-primary-800 dark:text-primary-300">Need Help?</h3>
           <p className="text-xs text-gray-600 dark:text-gray-300">
             Check our documentation or contact support for assistance.
+          </p>
           <Link 
             to="/documentation"
             onClick={closeSidebar}
             className="mt-3 w-full rounded-md bg-primary-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-700 dark:bg-primary-700 dark:hover:bg-primary-600 block text-center"
           >
             View Documentation
-          </Linkocumentation
-          </button>
+          </Link>
         </div>
       </div>
     </div>
