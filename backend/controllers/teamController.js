@@ -367,6 +367,22 @@ exports.addMember = asyncHandler(async (req, res, next) => {
     tenantId: req.tenantId
   });
 
+  // Populate invitation details for notification
+  await invitation.populate('invitedBy', 'name email');
+  await invitation.populate('team', 'name');
+
+  // Create notification for the invited user
+  await Notification.create({
+    recipient: req.body.userId,
+    tenantId: req.tenantId,
+    type: 'team_join_request',
+    title: `Team Invitation from ${invitation.invitedBy.name}`,
+    message: `You've been invited to join the team "${team.name}". Accept or reject this invitation.`,
+    link: '/team',
+    relatedTeam: req.params.id,
+    joinRequest: invitation._id
+  });
+
   res.status(200).json({
     success: true,
     data: invitation
@@ -570,6 +586,18 @@ exports.acceptInvitation = asyncHandler(async (req, res, next) => {
       userUpdate.companyName = teamOwner.companyName;
     }
     await User.findByIdAndUpdate(req.user.id, userUpdate);
+
+    // Create notification for the inviter that the invitation was accepted
+    const currentUser = await User.findById(req.user.id).select('name');
+    await Notification.create({
+      recipient: invitation.invitedBy,
+      tenantId: req.tenantId,
+      type: 'team_join_accepted',
+      title: 'Invitation Accepted',
+      message: `${currentUser.name} has accepted your invitation to join the team "${team.name}".`,
+      link: '/team',
+      relatedTeam: team._id
+    });
   }
 
   res.status(200).json({
@@ -595,6 +623,19 @@ exports.rejectInvitation = asyncHandler(async (req, res, next) => {
   invitation.status = 'rejected';
   invitation.respondedAt = new Date();
   await invitation.save();
+
+  // Create notification for the inviter that the invitation was rejected
+  const currentUser = await User.findById(req.user.id).select('name');
+  const team = await Team.findById(invitation.team).select('name');
+  await Notification.create({
+    recipient: invitation.invitedBy,
+    tenantId: req.tenantId,
+    type: 'team_join_rejected',
+    title: 'Invitation Rejected',
+    message: `${currentUser.name} has declined your invitation to join the team "${team.name}".`,
+    link: '/team',
+    relatedTeam: invitation.team
+  });
 
   res.status(200).json({
     success: true,
