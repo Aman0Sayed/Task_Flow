@@ -119,14 +119,30 @@ const Team: React.FC = () => {
       return false;
     }
 
-    const isOwner = team.owner?._id === user.id || team.owner === user.id;
+    // Check if user is the owner
+    const ownerId = team.owner?._id || team.owner;
+    const userId = user.id || user._id;
+    const isOwner = ownerId && userId && (
+      ownerId.toString() === userId.toString() ||
+      ownerId === userId
+    );
+    
     if (isOwner) return true;
 
-    const member = team.members.find(
-      (m: any) => m.user?._id === user.id || m.user === user.id
-    );
-    const isAdmin = member && (member.role === "admin" || member.role === "lead");
-    return isAdmin;
+    // Check if user is admin/lead member
+    if (team.members && Array.isArray(team.members)) {
+      const member = team.members.find((m: any) => {
+        const memberId = m.user?._id || m.user;
+        return memberId && userId && (
+          memberId.toString() === userId.toString() ||
+          memberId === userId
+        );
+      });
+      const isAdmin = member && (member.role === "admin" || member.role === "lead");
+      if (isAdmin) return true;
+    }
+    
+    return false;
   };
 
   const handleAddMemberSuccess = () => {
@@ -159,33 +175,39 @@ const Team: React.FC = () => {
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Team Management</h1>
           <div className="flex gap-3">
-            {teams.length > 0 ? (
-              canAddMembers(teams[0]) && (
-                <button
-                  className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 flex items-center gap-2"
-                  onClick={() => setShowAddMember(true)}
-                >
-                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                  Add Team Member
-                </button>
-              )
-            ) : isManager(user ?? undefined) ? (
+            {teams.length > 0 && (
+              <button
+                className={`text-white px-4 py-2 rounded-lg flex items-center gap-2 ${
+                  canAddMembers(teams[0])
+                    ? 'bg-indigo-600 hover:bg-indigo-700 cursor-pointer'
+                    : 'bg-gray-400 cursor-not-allowed opacity-50'
+                }`}
+                onClick={() => canAddMembers(teams[0]) && setShowAddMember(true)}
+                disabled={!canAddMembers(teams[0])}
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                Add Team Member
+              </button>
+            )}
+            {teams.length === 0 && isManager(user ?? undefined) && (
               <button
                 className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700"
                 onClick={() => setShowCreateTeam(true)}
               >
                 Create Team
               </button>
-            ) : hasPendingJoinRequest ? (
+            )}
+            {teams.length === 0 && !isManager(user ?? undefined) && hasPendingJoinRequest && (
               <button
                 className="bg-yellow-600 text-white px-4 py-2 rounded-lg cursor-not-allowed opacity-80"
                 disabled
               >
                 Join Request Pending
               </button>
-            ) : (
+            )}
+            {teams.length === 0 && !isManager(user ?? undefined) && !hasPendingJoinRequest && (
               <button
                 className="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700"
                 onClick={() => setShowBrowseTeams(true)}
