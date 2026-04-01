@@ -17,6 +17,7 @@ import {
   Clock,
   GitBranch,
   MessageSquare,
+  Calendar,
 } from 'lucide-react';
 
 export default function Documentation() {

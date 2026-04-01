@@ -18,7 +18,7 @@ export default function Calendar() {
         setLoading(false);
       }
     };
-
+ 
     fetchTasks();
   }, []);
 
