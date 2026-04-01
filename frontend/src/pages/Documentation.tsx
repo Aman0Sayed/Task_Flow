@@ -27,6 +27,16 @@ export default function Documentation() {
     setExpandedSection(expandedSection === sectionId ? null : sectionId);
   };
 
+  const scrollToSection = (sectionId: string) => {
+    setExpandedSection(sectionId);
+    setTimeout(() => {
+      const element = document.getElementById(`section-${sectionId}`);
+      if (element) {
+        element.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 0);
+  };
+
   const sections = [
     {
       id: 'overview',
@@ -542,7 +552,7 @@ export default function Documentation() {
               return (
                 <button
                   key={section.id}
-                  onClick={() => setExpandedSection(section.id)}
+                  onClick={() => scrollToSection(section.id)}
                   className="flex items-center gap-2 p-3 text-left rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors group"
                 >
                   <Icon className="w-4 h-4 text-blue-600 dark:text-blue-400 group-hover:scale-110 transition-transform" />
@@ -564,6 +574,7 @@ export default function Documentation() {
             return (
               <div
                 key={section.id}
+                id={`section-${section.id}`}
                 className="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 overflow-hidden transition-all hover:shadow-md"
               >
                 <button
