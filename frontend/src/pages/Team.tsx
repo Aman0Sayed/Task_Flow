@@ -9,7 +9,6 @@ import { isManager } from "../lib/managerUtils";
 
 const Team: React.FC = () => {
   const user = useAppSelector((state) => state.auth.user);
-  const [availableUsers, setAvailableUsers] = useState<any[]>([]);
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -84,17 +83,6 @@ const Team: React.FC = () => {
         setPendingTeamName(null);
       }
 
-      // Fetch available users
-      const availableRes = await fetch(`${BASE_URL}/api/users/available`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      const availableData = await availableRes.json();
-
-      if (availableData.success && Array.isArray(availableData.data)) {
-        setAvailableUsers(availableData.data);
-      } else {
-        setAvailableUsers([]);
-      }
     } catch {
       setError("Failed to fetch data");
     } finally {
@@ -298,40 +286,6 @@ const Team: React.FC = () => {
           </div>
         ) : (
           <div className="space-y-8">
-            {isManager(user ?? undefined) && (
-              <div>
-                <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-100 mb-4">
-                  Available Members
-                </h2>
-                {availableUsers.length === 0 ? (
-                  <div className="text-center text-gray-500 dark:text-gray-400 py-8">
-                    No available members
-                  </div>
-                ) : (
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-6">
-                    {availableUsers.map((availableUser) => (
-                      <div
-                        key={availableUser._id || availableUser.id || availableUser.email}
-                        className="flex flex-col items-center bg-green-50 dark:bg-green-900/20 rounded-xl p-4 shadow group hover:shadow-xl transition border border-green-200 dark:border-green-800"
-                      >
-                        <Avatar src={availableUser.avatar} name={availableUser.name} size="lg" />
-                        <div className="mt-4 text-lg font-semibold text-gray-700 dark:text-gray-200">
-                          {availableUser.name}
-                        </div>
-                        <div className="text-xs text-green-600 dark:text-green-400 font-medium mb-1">@{availableUser.taskflowId}</div>
-                        <div className="text-sm text-gray-400 mb-2 dark:text-gray-400">
-                          {availableUser.email}
-                        </div>
-                        <div className="text-xs bg-green-100 dark:bg-green-800 text-green-800 dark:text-green-200 px-2 py-1 rounded-full">
-                          Available
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
             <div>
               <h2 className="text-xl font-semibold text-gray-800 dark:text-gray-100 mb-4">
                 Team Members
