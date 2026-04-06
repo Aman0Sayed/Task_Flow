@@ -56,31 +56,41 @@ export default function AddTeamMemberModal({ isOpen, onClose, onSuccess }: AddTe
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       const teamsData = await teamsRes.json();
+      console.log('📋 Teams response:', teamsData);
 
       if (teamsData.success && teamsData.data && teamsData.data.length > 0) {
         const teamId = teamsData.data[0]._id;
+        console.log('✅ Current team ID:', teamId);
         setCurrentTeamId(teamId);
 
         // Now fetch users excluding those already in this team
-        const usersRes = await fetch(`${BASE_URL}/api/users/search?teamId=${teamId}`, {
+        const usersUrl = `${BASE_URL}/api/users/search?teamId=${teamId}`;
+        console.log('🔍 Fetching initial users from:', usersUrl);
+        
+        const usersRes = await fetch(usersUrl, {
           headers: token ? { Authorization: `Bearer ${token}` } : {},
         });
         const usersData = await usersRes.json();
+        console.log('📊 Initial users response:', usersData);
 
         if (usersData.success && Array.isArray(usersData.data)) {
+          console.log(`✅ Loaded ${usersData.data.length} initial users`);
           setUsers(usersData.data);
           setFilteredUsers(usersData.data);
         } else {
+          console.error('❌ Failed to load users - invalid response format');
           setError('Failed to load users');
           setUsers([]);
           setFilteredUsers([]);
         }
       } else {
+        console.error('❌ No teams available');
         setError('No teams available');
         setUsers([]);
         setFilteredUsers([]);
       }
     } catch (err) {
+      console.error('❌ Error fetching users:', err);
       setError('Error fetching users');
       setUsers([]);
       setFilteredUsers([]);

@@ -18,6 +18,9 @@ router.get('/available', userController.getAvailableUsers);
 // Get all users for search
 router.get('/search', userController.getAllUsers);
 
+// Debug endpoint
+router.get('/debug/stats', userController.debugUsers);
+
 // Get team members (users who are in at least one team)
 router.get('/team-members', userController.getTeamMembers);
 

@@ -87,7 +87,7 @@ exports.getTeamMembers = asyncHandler(async (req, res, next) => {
 // Get all users for search (with optional search query)
 exports.getAllUsers = asyncHandler(async (req, res, next) => {
   const { search, teamId } = req.query;
-  console.log('🔍 getAllUsers - search:', search, 'teamId:', teamId);
+  console.log('🔍 getAllUsers called with:', { search, teamId, userId: req.user.id, tenantId: req.tenantId });
 
   let excludeUserIds = [req.user.id]; // Always exclude current user
 
@@ -96,13 +96,15 @@ exports.getAllUsers = asyncHandler(async (req, res, next) => {
     try {
       const Team = require('../models/Team');
       const team = await Team.findById(teamId);
+      console.log('🔍 Found team:', { teamId, teamExists: !!team, memberCount: team?.members?.length || 0 });
+      
       if (team && team.members && Array.isArray(team.members)) {
         const memberUserIds = team.members.map(member => member.user);
         excludeUserIds = [...excludeUserIds, ...memberUserIds];
-        console.log('🔍 Team members to exclude:', memberUserIds.length);
+        console.log('🔍 Excluding IDs:', { count: excludeUserIds.length, ids: excludeUserIds });
       }
     } catch (err) {
-      console.error('Error fetching team:', err.message);
+      console.error('❌ Error fetching team:', err.message);
     }
   }
 
@@ -122,14 +124,25 @@ exports.getAllUsers = asyncHandler(async (req, res, next) => {
     ];
   }
 
-  console.log('🔍 Query:', JSON.stringify(query, null, 2));
+  console.log('🔍 Final query:', JSON.stringify(query, null, 2));
+
+  // First, let's see how many total active users exist for this tenant
+  const totalUsers = await User.countDocuments({ isActive: true, tenantId: req.tenantId });
+  console.log('📊 Total active users in tenant:', totalUsers);
+
+  // See how many users we're excluding
+  const excludedCount = await User.countDocuments({ _id: { $nin: excludeUserIds }, isActive: true, tenantId: req.tenantId });
+  console.log('📊 Non-excluded users in tenant:', excludedCount);
 
   const users = await User.find(query)
     .select('name email avatar role taskflowId')
     .sort('name')
     .limit(50); // Limit results for performance
 
-  console.log(`✅ Found ${users.length} users`);
+  console.log(`✅ Query returned ${users.length} users`);
+  if (users.length > 0) {
+    console.log('📋 Found users:', users.map(u => ({ name: u.name, taskflowId: u.taskflowId, email: u.email })));
+  }
 
   res.status(200).json({
     success: true,
@@ -138,7 +151,39 @@ exports.getAllUsers = asyncHandler(async (req, res, next) => {
   });
 });
 
-// Get single user
+// Debug endpoint to see database state
+exports.debugUsers = asyncHandler(async (req, res, next) => {
+  console.log('🐛 DEBUG: User database state for tenant:', req.tenantId);
+  
+  const totalUsers = await User.countDocuments({ tenantId: req.tenantId });
+  const activeUsers = await User.countDocuments({ tenantId: req.tenantId, isActive: true });
+  const allUsers = await User.find({ tenantId: req.tenantId })
+    .select('name email taskflowId isActive teams')
+    .limit(20);
+  
+  console.log('🐛 DEBUG:', { totalUsers, activeUsers, userCount: allUsers.length });
+  allUsers.forEach(u => {
+    console.log(`  - ${u.name} (${u.email}) taskflowId=${u.taskflowId} active=${u.isActive} teams=${u.teams?.length || 0}`);
+  });
+
+  res.status(200).json({
+    success: true,
+    debug: {
+      tenantId: req.tenantId,
+      userId: req.user.id,
+      totalUsers,
+      activeUsers,
+      userDetails: allUsers.map(u => ({
+        name: u.name,
+        email: u.email,
+        taskflowId: u.taskflowId,
+        isActive: u.isActive,
+        teamCount: u.teams?.length || 0
+      }))
+    }
+  });
+});
+
 exports.getUser = asyncHandler(async (req, res, next) => {
   const user = await User.findOne({
     _id: req.params.id,
