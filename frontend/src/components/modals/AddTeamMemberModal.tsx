@@ -120,34 +120,38 @@ export default function AddTeamMemberModal({ isOpen, onClose, onSuccess }: AddTe
 
     // Debounce server search by 300ms
     searchTimeoutRef.current = setTimeout(async () => {
-      if (currentTeamId) {
-        try {
-          const token = localStorage.getItem('token');
-          const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-          const searchUrl = `${BASE_URL}/api/users/search?teamId=${currentTeamId}&search=${encodeURIComponent(query)}`;
-          console.log('Searching with URL:', searchUrl);
-          
-          const res = await fetch(searchUrl, {
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
-          });
+      if (!currentTeamId) {
+        console.warn('❌ No team ID available for search');
+        return;
+      }
 
-          const data = await res.json();
-          console.log('Search response:', data);
-          
-          if (data.success && Array.isArray(data.data)) {
-            setFilteredUsers(data.data);
-          } else {
-            // Fall back to client-side filtering
-            const filtered = users.filter(user =>
-              user.name?.toLowerCase().includes(query.toLowerCase()) ||
-              user.taskflowId?.toLowerCase().includes(query.toLowerCase()) ||
-              user.email?.toLowerCase().includes(query.toLowerCase())
-            );
-            setFilteredUsers(filtered);
-          }
-        } catch (err) {
-          console.error('Search error:', err);
-          // Fall back to client-side filtering if server search fails
+      try {
+        const token = localStorage.getItem('token');
+        const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+        const searchUrl = `${BASE_URL}/api/users/search?teamId=${currentTeamId}&search=${encodeURIComponent(query)}`;
+        console.log('🔍 Searching with URL:', searchUrl);
+        
+        const res = await fetch(searchUrl, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+
+        console.log('📡 Response status:', res.status);
+
+        if (!res.ok) {
+          console.error('❌ Search request failed:', res.status, res.statusText);
+          throw new Error(`Search failed: ${res.status} ${res.statusText}`);
+        }
+
+        const data = await res.json();
+        console.log('✅ Search response:', data);
+        
+        if (data.success && Array.isArray(data.data)) {
+          console.log(`📊 Found ${data.data.length} results`);
+          setFilteredUsers(data.data);
+          setError(null);
+        } else {
+          console.warn('⚠️ Invalid response format, falling back to client-side filtering');
+          // Fall back to client-side filtering
           const filtered = users.filter(user =>
             user.name?.toLowerCase().includes(query.toLowerCase()) ||
             user.taskflowId?.toLowerCase().includes(query.toLowerCase()) ||
@@ -155,6 +159,16 @@ export default function AddTeamMemberModal({ isOpen, onClose, onSuccess }: AddTe
           );
           setFilteredUsers(filtered);
         }
+      } catch (err) {
+        console.error('❌ Search error:', err);
+        setError(`Search failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        // Fall back to client-side filtering if server search fails
+        const filtered = users.filter(user =>
+          user.name?.toLowerCase().includes(query.toLowerCase()) ||
+          user.taskflowId?.toLowerCase().includes(query.toLowerCase()) ||
+          user.email?.toLowerCase().includes(query.toLowerCase())
+        );
+        setFilteredUsers(filtered);
       }
     }, 300);
   };

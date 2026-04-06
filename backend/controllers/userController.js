@@ -87,22 +87,31 @@ exports.getTeamMembers = asyncHandler(async (req, res, next) => {
 // Get all users for search (with optional search query)
 exports.getAllUsers = asyncHandler(async (req, res, next) => {
   const { search, teamId } = req.query;
+  console.log('🔍 getAllUsers - search:', search, 'teamId:', teamId);
 
-  let query = {
-    isActive: true,
-    _id: { $ne: req.user.id }, // Exclude current user
-    tenantId: req.tenantId // Only show users from same tenant
-  };
+  let excludeUserIds = [req.user.id]; // Always exclude current user
 
-  // If teamId is provided, exclude users who are already members of that team
+  // If teamId is provided, also exclude users already in that team
   if (teamId) {
-    const Team = require('../models/Team');
-    const team = await Team.findById(teamId);
-    if (team) {
-      const memberUserIds = team.members.map(member => member.user);
-      query._id = { $nin: [req.user.id, ...memberUserIds] };
+    try {
+      const Team = require('../models/Team');
+      const team = await Team.findById(teamId);
+      if (team && team.members && Array.isArray(team.members)) {
+        const memberUserIds = team.members.map(member => member.user);
+        excludeUserIds = [...excludeUserIds, ...memberUserIds];
+        console.log('🔍 Team members to exclude:', memberUserIds.length);
+      }
+    } catch (err) {
+      console.error('Error fetching team:', err.message);
     }
   }
+
+  // Build the main query with proper structure
+  let query = {
+    isActive: true,
+    tenantId: req.tenantId,
+    _id: { $nin: excludeUserIds }
+  };
 
   // Add search filter if provided
   if (search && search.trim()) {
@@ -113,10 +122,14 @@ exports.getAllUsers = asyncHandler(async (req, res, next) => {
     ];
   }
 
+  console.log('🔍 Query:', JSON.stringify(query, null, 2));
+
   const users = await User.find(query)
     .select('name email avatar role taskflowId')
     .sort('name')
     .limit(50); // Limit results for performance
+
+  console.log(`✅ Found ${users.length} users`);
 
   res.status(200).json({
     success: true,
