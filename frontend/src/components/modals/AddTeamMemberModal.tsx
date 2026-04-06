@@ -62,72 +62,45 @@ export default function AddTeamMemberModal({ isOpen, onClose, onSuccess }: AddTe
 
       if (teamsData.success && teamsData.data && teamsData.data.length > 0) {
         const teamId = teamsData.data[0]._id;
-        const currentTeamMembers = teamsData.data[0].members?.map((m: any) => m.user?._id || m.user) || [];
         console.log('✅ Current team ID:', teamId);
-        console.log('👥 Current team members:', currentTeamMembers.length);
         setCurrentTeamId(teamId);
 
-        // Try fetching users with teamId filter first
-        let usersData = null;
-        let usersUrl = `${BASE_URL}/api/users/search?teamId=${teamId}`;
-        console.log('🔍 Attempt 1: Fetching with teamId filter from:', usersUrl);
+        // Fetch users with no search/filter initially
+        const usersUrl = `${BASE_URL}/api/users/search?teamId=${teamId}`;
+        console.log('🔍 Fetching users from:', usersUrl);
         
-        try {
-          const usersRes = await fetch(usersUrl, {
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
-          });
-          usersData = await usersRes.json();
-          console.log('📊 Response from /search?teamId:', usersData);
-        } catch (err) {
-          console.error('❌ Error with teamId filter');
+        const usersRes = await fetch(usersUrl, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        
+        if (!usersRes.ok) {
+          throw new Error(`Failed to fetch: ${usersRes.status}`);
         }
 
-        // If that returned nothing, try search without teamId
-        if (!usersData || !usersData.success || usersData.data.length === 0) {
-          console.log('⚠️ No users with teamId filter, trying /search without filter...');
-          usersUrl = `${BASE_URL}/api/users/search`;
-          try {
-            const usersRes = await fetch(usersUrl, {
-              headers: token ? { Authorization: `Bearer ${token}` } : {},
-            });
-            usersData = await usersRes.json();
-            console.log('📊 Response from /search:', usersData);
-          } catch (err) {
-            console.error('❌ Error with /search');
-          }
+        const usersData = await usersRes.json();
+        
+        // Log debug info if available
+        if (usersData._debug) {
+          console.log('%c🔍 === BACKEND DEBUG INFO ===', 'background: #1e90ff; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;');
+          console.log('Input:', usersData._debug.input);
+          console.log('Steps:');
+          usersData._debug.steps.forEach((step: string) => console.log('  ' + step));
+          console.log('Query Structure:', usersData._debug.queryStructure);
+          console.log('Excluded IDs:', usersData._debug.excludeUserIds);
+          console.log('%c=== END DEBUG ===', 'background: #1e90ff; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;');
         }
+        
+        console.log('📊 Users response:', usersData);
 
-        // If still nothing, try the basic /users endpoint
-        if (!usersData || !usersData.success || usersData.data.length === 0) {
-          console.log('⚠️ Trying basic /users endpoint...');
-          usersUrl = `${BASE_URL}/api/users`;
-          try {
-            const usersRes = await fetch(usersUrl, {
-              headers: token ? { Authorization: `Bearer ${token}` } : {},
-            });
-            usersData = await usersRes.json();
-            console.log('📊 Response from /users:', usersData);
-            
-            // Filter out current user and team members manually
-            const userId = currentUser?.id || currentUser?._id;
-            if (usersData.success && Array.isArray(usersData.data)) {
-              const filtered = usersData.data.filter((u: any) => 
-                u._id !== userId && !currentTeamMembers.includes(u._id)
-              );
-              usersData.data = filtered;
-              console.log('📊 After filtering:', usersData);
-            }
-          } catch (err) {
-            console.error('❌ Error with /users');
-          }
-        }
-
-        if (usersData && usersData.success && Array.isArray(usersData.data)) {
-          console.log(`✅ Loaded ${usersData.data.length} initial users`);
+        if (usersData.success && Array.isArray(usersData.data)) {
+          console.log(`✅ Loaded ${usersData.data.length} users`);
           setUsers(usersData.data);
           setFilteredUsers(usersData.data);
+          if (usersData.data.length === 0) {
+            console.warn('⚠️ No users returned - might all be in the team already or tenant mismatch');
+          }
         } else {
-          console.error('❌ Failed to load users - invalid response format');
+          console.error('❌ Invalid response format:', usersData);
           setError('Failed to load users');
           setUsers([]);
           setFilteredUsers([]);
@@ -140,7 +113,7 @@ export default function AddTeamMemberModal({ isOpen, onClose, onSuccess }: AddTe
       }
     } catch (err) {
       console.error('❌ Error fetching users:', err);
-      setError('Error fetching users');
+      setError(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`);
       setUsers([]);
       setFilteredUsers([]);
     } finally {
@@ -202,6 +175,16 @@ export default function AddTeamMemberModal({ isOpen, onClose, onSuccess }: AddTe
         }
 
         const data = await res.json();
+        
+        // Log debug info if available
+        if (data._debug) {
+          console.log('%c🔍 === SEARCH DEBUG INFO ===', 'background: #ff6b6b; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;');
+          console.log('Input:', data._debug.input);
+          console.log('Steps:');
+          data._debug.steps.forEach((step: string) => console.log('  ' + step));
+          console.log('%c=== END DEBUG ===', 'background: #ff6b6b; color: white; padding: 2px 6px; border-radius: 3px; font-weight: bold;');
+        }
+        
         console.log('✅ Search response:', data);
         
         if (data.success && Array.isArray(data.data)) {

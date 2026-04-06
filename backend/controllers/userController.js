@@ -87,67 +87,81 @@ exports.getTeamMembers = asyncHandler(async (req, res, next) => {
 // Get all users for search (with optional search query)
 exports.getAllUsers = asyncHandler(async (req, res, next) => {
   const { search, teamId } = req.query;
-  console.log('🔍 getAllUsers called with:', { search, teamId, userId: req.user.id, tenantId: req.tenantId });
+  
+  const debug = {
+    input: { search, teamId, userId: req.user.id, tenantId: req.tenantId },
+    steps: []
+  };
 
-  let excludeUserIds = [req.user.id]; // Always exclude current user
+  // Get ALL users first (no filters except tenantId)
+  const allUsersInTenant = await User.find({ tenantId: req.tenantId })
+    .select('_id name email taskflowId isActive')
+    .sort('name');
+  
+  debug.steps.push(`📊 Total users in tenant: ${allUsersInTenant.length}`);
+  allUsersInTenant.forEach(u => {
+    debug.steps.push(`  - ${u.name} (${u.taskflowId}) active=${u.isActive} _id=${u._id}`);
+  });
 
-  // If teamId is provided, also exclude users already in that team
+  // Now build exclusion list
+  let excludeUserIds = [req.user.id];
+  debug.steps.push(`🚫 Always exclude current user: ${req.user.id}`);
+
   if (teamId) {
     try {
       const Team = require('../models/Team');
       const team = await Team.findById(teamId);
-      console.log('🔍 Found team:', { teamId, teamExists: !!team, memberCount: team?.members?.length || 0 });
-      
-      if (team && team.members && Array.isArray(team.members)) {
-        const memberUserIds = team.members.map(member => member.user);
-        excludeUserIds = [...excludeUserIds, ...memberUserIds];
-        console.log('🔍 Excluding IDs:', { count: excludeUserIds.length, ids: excludeUserIds });
+      if (team && team.members) {
+        const memberIds = team.members.map(m => m.user);
+        excludeUserIds = [...excludeUserIds, ...memberIds];
+        debug.steps.push(`🚫 Also exclude ${memberIds.length} team members: ${memberIds.join(', ')}`);
       }
     } catch (err) {
-      console.error('❌ Error fetching team:', err.message);
+      debug.steps.push(`❌ Error fetching team: ${err.message}`);
     }
   }
 
-  // Build the main query with proper structure
+  debug.steps.push(`🚫 Total IDs to exclude: ${excludeUserIds.length}`);
+  debug.excludeUserIds = excludeUserIds;
+
+  // Build query - DON'T filter by isActive yet, to see if users exist
   let query = {
-    isActive: true,
     tenantId: req.tenantId,
     _id: { $nin: excludeUserIds }
   };
 
-  // Add search filter if provided
+  // Add search terms if provided
   if (search && search.trim()) {
     query.$or = [
       { name: { $regex: search, $options: 'i' } },
       { taskflowId: { $regex: search, $options: 'i' } },
       { email: { $regex: search, $options: 'i' } }
     ];
+    debug.steps.push(`🔎 Added search filter for: "${search}"`);
+  } else {
+    // Only filter by isActive if not searching
+    query.isActive = true;
+    debug.steps.push(`✅ Added isActive=true filter`);
   }
 
-  console.log('🔍 Final query:', JSON.stringify(query, null, 2));
+  debug.queryStructure = JSON.stringify(query, null, 2);
 
-  // First, let's see how many total active users exist for this tenant
-  const totalUsers = await User.countDocuments({ isActive: true, tenantId: req.tenantId });
-  console.log('📊 Total active users in tenant:', totalUsers);
-
-  // See how many users we're excluding
-  const excludedCount = await User.countDocuments({ _id: { $nin: excludeUserIds }, isActive: true, tenantId: req.tenantId });
-  console.log('📊 Non-excluded users in tenant:', excludedCount);
-
+  // Execute query
   const users = await User.find(query)
-    .select('name email avatar role taskflowId')
+    .select('name email avatar role taskflowId _id')
     .sort('name')
-    .limit(50); // Limit results for performance
+    .limit(50);
 
-  console.log(`✅ Query returned ${users.length} users`);
-  if (users.length > 0) {
-    console.log('📋 Found users:', users.map(u => ({ name: u.name, taskflowId: u.taskflowId, email: u.email })));
-  }
+  debug.steps.push(`✅ Query returned ${users.length} users`);
+  users.forEach(u => {
+    debug.steps.push(`  - ${u.name} (${u.taskflowId}) ${u.email}`);
+  });
 
   res.status(200).json({
     success: true,
     count: users.length,
-    data: users
+    data: users,
+    _debug: debug  // Include debug info in response
   });
 });
 
