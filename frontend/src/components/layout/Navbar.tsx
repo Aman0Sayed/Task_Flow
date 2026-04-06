@@ -74,24 +74,27 @@ export default function Navbar({ children }: NavbarProps) {
 
       const token = localStorage.getItem('token');
       const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-      const teamId = notification?.relatedTeam?._id || notification?.relatedTeam;
       const requestId = notification?.joinRequest?._id || notification?.joinRequest;
 
-      if (!teamId || !requestId) {
+      if (!requestId) {
         // If payload is incomplete, remove stale notification from list.
+        console.warn('No joinRequest ID found in notification');
         setNotifications((prev) => prev.filter((n) => n._id !== notification._id));
         setUnreadCount((prev) => Math.max(0, prev - (notification.isRead ? 0 : 1)));
         return;
       }
       
       const endpoint = action === 'accept' ? 'accept' : 'reject';
-      const res = await fetch(`${BASE_URL}/api/teams/${teamId}/join-requests/${requestId}/${endpoint}`, {
+      const url = `${BASE_URL}/api/teams/invitations/${requestId}/${endpoint}`;
+      console.log(`Calling ${url}`);
+      
+      const res = await fetch(url, {
         method: 'PUT',
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
 
       if (res.ok || res.status === 404) {
-        // Optimistically remove the handled (or stale) join request notification.
+        // Optimistically remove the handled (or stale) invitation notification.
         setNotifications((prev) => prev.filter((n) => n._id !== notification._id));
         setUnreadCount((prev) => Math.max(0, prev - (notification.isRead ? 0 : 1)));
 
@@ -102,9 +105,13 @@ export default function Navbar({ children }: NavbarProps) {
         });
 
         fetchNotifications();
+      } else {
+        const errorData = await res.json();
+        console.error('Error response:', errorData);
+        throw new Error(errorData.message || `Failed to ${action} invitation`);
       }
     } catch (error) {
-      console.error(`Error ${action}ing join request:`, error);
+      console.error(`Error ${action}ing invitation:`, error);
     } finally {
       setProcessingJoinRequestId(null);
     }
