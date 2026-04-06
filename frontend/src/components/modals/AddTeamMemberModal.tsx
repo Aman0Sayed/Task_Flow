@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { X, Search, UserPlus } from 'lucide-react';
 import AnimatedList from '../ui/AnimatedList';
 
@@ -26,6 +26,7 @@ export default function AddTeamMemberModal({ isOpen, onClose, onSuccess }: AddTe
   const [error, setError] = useState<string | null>(null);
   const [inviting, setInviting] = useState(false);
   const [currentTeamId, setCurrentTeamId] = useState<string | null>(null);
+  const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Fetch all users when modal opens
   useEffect(() => {
@@ -35,6 +36,13 @@ export default function AddTeamMemberModal({ isOpen, onClose, onSuccess }: AddTe
       setSelectedUser(null);
       fetchCurrentTeamAndUsers();
     }
+    
+    // Cleanup timeout on unmount
+    return () => {
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+    };
   }, [isOpen]);
 
   const fetchCurrentTeamAndUsers = async () => {
@@ -99,29 +107,56 @@ export default function AddTeamMemberModal({ isOpen, onClose, onSuccess }: AddTe
     const query = e.target.value;
     setSearchQuery(query);
 
-    if (query.trim() && currentTeamId) {
-      // If there's a search query, fetch filtered results from server
-      try {
-        const token = localStorage.getItem('token');
-        const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-        const res = await fetch(`${BASE_URL}/api/users/search?teamId=${currentTeamId}&search=${encodeURIComponent(query)}`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-
-        const data = await res.json();
-        if (data.success && Array.isArray(data.data)) {
-          setFilteredUsers(data.data);
-        }
-      } catch (err) {
-        // Fall back to client-side filtering if server search fails
-        const filtered = users.filter(user =>
-          user.name.toLowerCase().includes(query.toLowerCase()) ||
-          user.taskflowId.toLowerCase().includes(query.toLowerCase()) ||
-          user.email.toLowerCase().includes(query.toLowerCase())
-        );
-        setFilteredUsers(filtered);
-      }
+    // Clear previous timeout
+    if (searchTimeoutRef.current) {
+      clearTimeout(searchTimeoutRef.current);
     }
+
+    if (!query.trim()) {
+      // If search is empty, show all users
+      setFilteredUsers(users);
+      return;
+    }
+
+    // Debounce server search by 300ms
+    searchTimeoutRef.current = setTimeout(async () => {
+      if (currentTeamId) {
+        try {
+          const token = localStorage.getItem('token');
+          const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+          const searchUrl = `${BASE_URL}/api/users/search?teamId=${currentTeamId}&search=${encodeURIComponent(query)}`;
+          console.log('Searching with URL:', searchUrl);
+          
+          const res = await fetch(searchUrl, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          });
+
+          const data = await res.json();
+          console.log('Search response:', data);
+          
+          if (data.success && Array.isArray(data.data)) {
+            setFilteredUsers(data.data);
+          } else {
+            // Fall back to client-side filtering
+            const filtered = users.filter(user =>
+              user.name?.toLowerCase().includes(query.toLowerCase()) ||
+              user.taskflowId?.toLowerCase().includes(query.toLowerCase()) ||
+              user.email?.toLowerCase().includes(query.toLowerCase())
+            );
+            setFilteredUsers(filtered);
+          }
+        } catch (err) {
+          console.error('Search error:', err);
+          // Fall back to client-side filtering if server search fails
+          const filtered = users.filter(user =>
+            user.name?.toLowerCase().includes(query.toLowerCase()) ||
+            user.taskflowId?.toLowerCase().includes(query.toLowerCase()) ||
+            user.email?.toLowerCase().includes(query.toLowerCase())
+          );
+          setFilteredUsers(filtered);
+        }
+      }
+    }, 300);
   };
 
   const handleUserSelect = useCallback((user: User) => {

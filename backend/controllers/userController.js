@@ -105,18 +105,11 @@ exports.getAllUsers = asyncHandler(async (req, res, next) => {
   }
 
   // Add search filter if provided
-  if (search) {
-    query.$and = [
-      {
-        $or: [
-          { name: { $regex: search, $options: 'i' } },
-          { taskflowId: { $regex: search, $options: 'i' } },
-          { email: { $regex: search, $options: 'i' } }
-        ]
-      },
-      { isActive: true },
-      { _id: { $ne: req.user.id } },
-      { tenantId: req.tenantId }
+  if (search && search.trim()) {
+    query.$or = [
+      { name: { $regex: search, $options: 'i' } },
+      { taskflowId: { $regex: search, $options: 'i' } },
+      { email: { $regex: search, $options: 'i' } }
     ];
   }
 
