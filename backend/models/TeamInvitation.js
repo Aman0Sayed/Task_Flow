@@ -41,7 +41,8 @@ const teamInvitationSchema = new mongoose.Schema({
   }
 });
 
-// Compound index to prevent duplicate pending invitations
-teamInvitationSchema.index({ team: 1, invitedUser: 1, status: 1 }, { unique: true, partialFilterExpression: { status: 'pending' } });
+// Index for faster lookups (no unique constraint - allows multiple invitations to be sent)
+teamInvitationSchema.index({ team: 1, invitedUser: 1 });
+teamInvitationSchema.index({ invitedUser: 1, status: 1 });
 
 module.exports = mongoose.model('TeamInvitation', teamInvitationSchema);
