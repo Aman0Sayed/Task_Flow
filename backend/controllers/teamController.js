@@ -347,18 +347,7 @@ exports.addMember = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse('User is already a member', 400));
   }
 
-  // Check if there's already a pending invitation
-  const existingInvitation = await TeamInvitation.findOne({
-    team: req.params.id,
-    invitedUser: req.body.userId,
-    status: 'pending'
-  });
-
-  if (existingInvitation) {
-    return next(new ErrorResponse('Invitation already sent to this user', 400));
-  }
-
-  // Create invitation
+  // Create invitation (allow multiple invitations to be sent, e.g., for resending)
   const invitation = await TeamInvitation.create({
     team: req.params.id,
     invitedUser: req.body.userId,
