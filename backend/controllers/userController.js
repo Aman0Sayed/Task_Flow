@@ -157,29 +157,52 @@ exports.debugUsers = asyncHandler(async (req, res, next) => {
   
   const totalUsers = await User.countDocuments({ tenantId: req.tenantId });
   const activeUsers = await User.countDocuments({ tenantId: req.tenantId, isActive: true });
-  const allUsers = await User.find({ tenantId: req.tenantId })
-    .select('name email taskflowId isActive teams')
-    .limit(20);
+  const currentUserId = req.user.id;
+  const otherUsers = await User.countDocuments({ tenantId: req.tenantId, _id: { $ne: currentUserId }, isActive: true });
   
-  console.log('🐛 DEBUG:', { totalUsers, activeUsers, userCount: allUsers.length });
+  const allUsers = await User.find({ tenantId: req.tenantId })
+    .select('name email taskflowId isActive teams _id')
+    .limit(50);
+  
+  // Get the current team info
+  const Team = require('../models/Team');
+  const teamId = req.query.teamId;
+  let teamMembers = [];
+  if (teamId) {
+    const team = await Team.findById(teamId).select('members');
+    teamMembers = team?.members?.map(m => m.user?.toString?.() || m.user) || [];
+    console.log(`🐛 Team ${teamId} has ${teamMembers.length} members`);
+  }
+  
+  console.log('🐛 DEBUG nums:', { totalUsers, activeUsers, otherUsers, currentUserId });
   allUsers.forEach(u => {
-    console.log(`  - ${u.name} (${u.email}) taskflowId=${u.taskflowId} active=${u.isActive} teams=${u.teams?.length || 0}`);
+    const isTeamMember = teamMembers.includes(u._id.toString());
+    console.log(`  - ${u.name} (${u.taskflowId}) isActive=${u.isActive} isTeamMember=${isTeamMember}`);
   });
 
   res.status(200).json({
     success: true,
     debug: {
       tenantId: req.tenantId,
-      userId: req.user.id,
+      currentUserId,
+      teamId,
       totalUsers,
       activeUsers,
-      userDetails: allUsers.map(u => ({
-        name: u.name,
-        email: u.email,
-        taskflowId: u.taskflowId,
-        isActive: u.isActive,
-        teamCount: u.teams?.length || 0
-      }))
+      otherUsers,
+      teamMemberCount: teamMembers.length,
+      userDetails: allUsers.map(u => {
+        const isTeamMember = teamMembers.includes(u._id.toString());
+        const isCurrent = u._id.toString() === currentUserId;
+        return {
+          id: u._id,
+          name: u.name,
+          email: u.email,
+          taskflowId: u.taskflowId,
+          isActive: u.isActive,
+          isCurrent,
+          isTeamMember
+        };
+      })
     }
   });
 });

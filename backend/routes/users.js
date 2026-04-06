@@ -4,6 +4,7 @@ const { protect } = require('../middlewares/auth');
 const userController = require('../controllers/userController');
 const asyncHandler = require('../utils/asyncHandler');
 const upload = require('../config/upload');
+const User = require('../models/User');
 
 const router = express.Router();
 
@@ -20,6 +21,28 @@ router.get('/search', userController.getAllUsers);
 
 // Debug endpoint
 router.get('/debug/stats', userController.debugUsers);
+
+// Debug - see ALL users without filtering
+router.get('/debug/all-users', asyncHandler(async (req, res) => {
+  const User = require('../models/User');
+  const users = await User.find({ tenantId: req.tenantId })
+    .select('name email taskflowId isActive _id teams')
+    .limit(100);
+  
+  res.status(200).json({
+    success: true,
+    tenantId: req.tenantId,
+    count: users.length,
+    users: users.map(u => ({
+      id: u._id,
+      name: u.name,
+      email: u.email,
+      taskflowId: u.taskflowId,
+      isActive: u.isActive,
+      teamsCount: u.teams?.length || 0
+    }))
+  });
+}));
 
 // Get team members (users who are in at least one team)
 router.get('/team-members', userController.getTeamMembers);
