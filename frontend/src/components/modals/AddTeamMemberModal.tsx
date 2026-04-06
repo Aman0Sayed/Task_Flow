@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { X, Search, UserPlus } from 'lucide-react';
 import AnimatedList from '../ui/AnimatedList';
+import { useAppSelector } from '../../hooks/hook';
 
 interface AddTeamMemberModalProps {
   isOpen: boolean;
@@ -18,6 +19,7 @@ interface User {
 }
 
 export default function AddTeamMemberModal({ isOpen, onClose, onSuccess }: AddTeamMemberModalProps) {
+  const currentUser = useAppSelector((state) => state.auth.user);
   const [users, setUsers] = useState<User[]>([]);
   const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
@@ -60,20 +62,67 @@ export default function AddTeamMemberModal({ isOpen, onClose, onSuccess }: AddTe
 
       if (teamsData.success && teamsData.data && teamsData.data.length > 0) {
         const teamId = teamsData.data[0]._id;
+        const currentTeamMembers = teamsData.data[0].members?.map((m: any) => m.user?._id || m.user) || [];
         console.log('✅ Current team ID:', teamId);
+        console.log('👥 Current team members:', currentTeamMembers.length);
         setCurrentTeamId(teamId);
 
-        // Now fetch users excluding those already in this team
-        const usersUrl = `${BASE_URL}/api/users/search?teamId=${teamId}`;
-        console.log('🔍 Fetching initial users from:', usersUrl);
+        // Try fetching users with teamId filter first
+        let usersData = null;
+        let usersUrl = `${BASE_URL}/api/users/search?teamId=${teamId}`;
+        console.log('🔍 Attempt 1: Fetching with teamId filter from:', usersUrl);
         
-        const usersRes = await fetch(usersUrl, {
-          headers: token ? { Authorization: `Bearer ${token}` } : {},
-        });
-        const usersData = await usersRes.json();
-        console.log('📊 Initial users response:', usersData);
+        try {
+          const usersRes = await fetch(usersUrl, {
+            headers: token ? { Authorization: `Bearer ${token}` } : {},
+          });
+          usersData = await usersRes.json();
+          console.log('📊 Response from /search?teamId:', usersData);
+        } catch (err) {
+          console.error('❌ Error with teamId filter');
+        }
 
-        if (usersData.success && Array.isArray(usersData.data)) {
+        // If that returned nothing, try search without teamId
+        if (!usersData || !usersData.success || usersData.data.length === 0) {
+          console.log('⚠️ No users with teamId filter, trying /search without filter...');
+          usersUrl = `${BASE_URL}/api/users/search`;
+          try {
+            const usersRes = await fetch(usersUrl, {
+              headers: token ? { Authorization: `Bearer ${token}` } : {},
+            });
+            usersData = await usersRes.json();
+            console.log('📊 Response from /search:', usersData);
+          } catch (err) {
+            console.error('❌ Error with /search');
+          }
+        }
+
+        // If still nothing, try the basic /users endpoint
+        if (!usersData || !usersData.success || usersData.data.length === 0) {
+          console.log('⚠️ Trying basic /users endpoint...');
+          usersUrl = `${BASE_URL}/api/users`;
+          try {
+            const usersRes = await fetch(usersUrl, {
+              headers: token ? { Authorization: `Bearer ${token}` } : {},
+            });
+            usersData = await usersRes.json();
+            console.log('📊 Response from /users:', usersData);
+            
+            // Filter out current user and team members manually
+            const userId = currentUser?.id || currentUser?._id;
+            if (usersData.success && Array.isArray(usersData.data)) {
+              const filtered = usersData.data.filter((u: any) => 
+                u._id !== userId && !currentTeamMembers.includes(u._id)
+              );
+              usersData.data = filtered;
+              console.log('📊 After filtering:', usersData);
+            }
+          } catch (err) {
+            console.error('❌ Error with /users');
+          }
+        }
+
+        if (usersData && usersData.success && Array.isArray(usersData.data)) {
           console.log(`✅ Loaded ${usersData.data.length} initial users`);
           setUsers(usersData.data);
           setFilteredUsers(usersData.data);
@@ -259,12 +308,25 @@ export default function AddTeamMemberModal({ isOpen, onClose, onSuccess }: AddTe
             </div>
           ) : filteredUsers.length === 0 ? (
             <div className="flex items-center justify-center h-64">
-              <div className="text-center text-gray-500 dark:text-gray-400">
-                {searchQuery ? 'No users found matching your search' : 'No users available'}
+              <div className="text-center">
+                <div className="text-gray-500 dark:text-gray-400 mb-4">
+                  {searchQuery ? 'No users found matching your search' : 'No users available to add'}
+                </div>
+                {error && (
+                  <div className="text-red-500 text-xs">
+                    Error: {error}
+                  </div>
+                )}
+                <div className="text-xs text-gray-400 mt-4">
+                  Total in users list: {users.length}
+                </div>
               </div>
             </div>
           ) : (
             <div className="p-6 pt-0 h-full overflow-hidden">
+              <div className="text-xs text-gray-500 dark:text-gray-400 mb-3">
+                Showing {filteredUsers.length} available user{filteredUsers.length !== 1 ? 's' : ''}
+              </div>
               <AnimatedList
                 items={filteredUsers.map(user => user._id)}
                 onItemSelect={(userId: string) => {
