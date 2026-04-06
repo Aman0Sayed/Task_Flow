@@ -363,7 +363,6 @@ exports.addMember = asyncHandler(async (req, res, next) => {
   // Create notification for the invited user
   await Notification.create({
     recipient: req.body.userId,
-    tenantId: req.tenantId,
     type: 'team_join_request',
     title: `Team Invitation from ${invitation.invitedBy.name}`,
     message: `You've been invited to join the team "${team.name}". Accept or reject this invitation.`,
@@ -414,7 +413,6 @@ exports.removeMember = asyncHandler(async (req, res, next) => {
 
   await Notification.create({
     recipient: req.params.userId,
-    tenantId: req.tenantId,
     type: 'team_member_kicked',
     title: 'Removed From Team',
     message: 'You have been removed from the team.',
@@ -580,7 +578,6 @@ exports.acceptInvitation = asyncHandler(async (req, res, next) => {
     const currentUser = await User.findById(req.user.id).select('name');
     await Notification.create({
       recipient: invitation.invitedBy,
-      tenantId: req.tenantId,
       type: 'team_join_accepted',
       title: 'Invitation Accepted',
       message: `${currentUser.name} has accepted your invitation to join the team "${team.name}".`,
@@ -618,7 +615,6 @@ exports.rejectInvitation = asyncHandler(async (req, res, next) => {
   const team = await Team.findById(invitation.team).select('name');
   await Notification.create({
     recipient: invitation.invitedBy,
-    tenantId: req.tenantId,
     type: 'team_join_rejected',
     title: 'Invitation Rejected',
     message: `${currentUser.name} has declined your invitation to join the team "${team.name}".`,
@@ -836,7 +832,6 @@ exports.acceptJoinRequest = asyncHandler(async (req, res, next) => {
   // Create notification for the requesting user
   await Notification.create({
     recipient: joinRequest.invitedUser,
-    tenantId: req.tenantId,
     type: 'team_join_accepted',
     title: 'Join Request Accepted',
     message: `Your request to join ${team.name} has been accepted`,
@@ -912,7 +907,6 @@ exports.rejectJoinRequest = asyncHandler(async (req, res, next) => {
   // Create notification for the requesting user
   await Notification.create({
     recipient: joinRequest.invitedUser,
-    tenantId: req.tenantId,
     type: 'team_join_rejected',
     title: 'Join Request Rejected',
     message: `Your request to join ${team.name} has been rejected`,

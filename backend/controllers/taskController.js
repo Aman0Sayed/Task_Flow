@@ -99,8 +99,7 @@ exports.createTask = asyncHandler(async (req, res, next) => {
       message: `${req.user.name} assigned you a new task: ${task.title}`,
       link: `/tasks/${task._id}`,
       relatedProject: project._id,
-      relatedTask: task._id,
-      tenantId: req.tenantId
+      relatedTask: task._id
     });
   }
 
