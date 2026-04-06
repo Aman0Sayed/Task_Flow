@@ -67,8 +67,9 @@ exports.register = asyncHandler(async (req, res, next) => {
 
     console.log(`Manager ${taskflowId} tenantId ${tenantId} (company: ${normalizedCompanyName})`);
   } else {
+    // Regular users don't need company name - put them in the default global tenant
     tenantId = 'default_user_tenant';
-    console.log(`User ${taskflowId} tenantId ${tenantId} (default)`);
+    console.log(`User ${taskflowId} tenantId ${tenantId} (global user)`);
   }
 
   const user = await User.create({

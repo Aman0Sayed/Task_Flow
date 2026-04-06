@@ -93,14 +93,14 @@ exports.getAllUsers = asyncHandler(async (req, res, next) => {
     steps: []
   };
 
-  // Get ALL users first (no filters except tenantId)
-  const allUsersInTenant = await User.find({ tenantId: req.tenantId })
+  // Get ALL users from database (GLOBAL - no tenantId filter)
+  const allUsersInDatabase = await User.find({ isActive: true })
     .select('_id name email taskflowId isActive')
     .sort('name');
   
-  debug.steps.push(`📊 Total users in tenant: ${allUsersInTenant.length}`);
-  allUsersInTenant.forEach(u => {
-    debug.steps.push(`  - ${u.name} (${u.taskflowId}) active=${u.isActive} _id=${u._id}`);
+  debug.steps.push(`📊 Total users in database: ${allUsersInDatabase.length}`);
+  allUsersInDatabase.slice(0, 10).forEach(u => {
+    debug.steps.push(`  - ${u.name} (${u.taskflowId})`);
   });
 
   // Now build exclusion list
@@ -114,7 +114,7 @@ exports.getAllUsers = asyncHandler(async (req, res, next) => {
       if (team && team.members) {
         const memberIds = team.members.map(m => m.user);
         excludeUserIds = [...excludeUserIds, ...memberIds];
-        debug.steps.push(`🚫 Also exclude ${memberIds.length} team members: ${memberIds.join(', ')}`);
+        debug.steps.push(`🚫 Also exclude ${memberIds.length} team members`);
       }
     } catch (err) {
       debug.steps.push(`❌ Error fetching team: ${err.message}`);
@@ -124,9 +124,9 @@ exports.getAllUsers = asyncHandler(async (req, res, next) => {
   debug.steps.push(`🚫 Total IDs to exclude: ${excludeUserIds.length}`);
   debug.excludeUserIds = excludeUserIds;
 
-  // Build query - DON'T filter by isActive yet, to see if users exist
+  // Build query - search across ALL users globally
   let query = {
-    tenantId: req.tenantId,
+    isActive: true,
     _id: { $nin: excludeUserIds }
   };
 
@@ -138,10 +138,6 @@ exports.getAllUsers = asyncHandler(async (req, res, next) => {
       { email: { $regex: search, $options: 'i' } }
     ];
     debug.steps.push(`🔎 Added search filter for: "${search}"`);
-  } else {
-    // Only filter by isActive if not searching
-    query.isActive = true;
-    debug.steps.push(`✅ Added isActive=true filter`);
   }
 
   debug.queryStructure = JSON.stringify(query, null, 2);
@@ -153,7 +149,7 @@ exports.getAllUsers = asyncHandler(async (req, res, next) => {
     .limit(50);
 
   debug.steps.push(`✅ Query returned ${users.length} users`);
-  users.forEach(u => {
+  users.slice(0, 10).forEach(u => {
     debug.steps.push(`  - ${u.name} (${u.taskflowId}) ${u.email}`);
   });
 

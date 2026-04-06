@@ -57,6 +57,7 @@ function SignupForm() {
     const normalizedEmail = (formData.email || '').trim().toLowerCase();
     const isEmailLike = (value: string) => /^\S+@\S+\.\S+$/.test(value);
 
+    // Only managers need company name
     if (role === 'manager' && !normalizedCompanyName) {
       setFormError('Company name is required for managers');
       return false;
@@ -97,7 +98,8 @@ function SignupForm() {
         role
       };
 
-      if (role === 'manager' && formData.companyName) {
+      // Only include company name for managers
+      if (role === 'manager') {
         registerData.companyName = formData.companyName.trim();
       }
 

@@ -5,10 +5,69 @@ const userController = require('../controllers/userController');
 const asyncHandler = require('../utils/asyncHandler');
 const upload = require('../config/upload');
 const User = require('../models/User');
+const Team = require('../models/Team');
 
 const router = express.Router();
 
 router.use(protect);
+
+// DEBUG - comprehensive inspection (AFTER protect middleware)
+router.get('/debug/inspect', asyncHandler(async (req, res) => {
+  console.log('🔍 DEBUG INSPECT - User:', req.user?.id, 'Tenant:', req.tenantId);
+  
+  const currentUserId = req.user?.id;
+  const tenantId = req.tenantId;
+  
+  // Get current user info
+  const currentUser = await User.findById(currentUserId).select('_id name email taskflowId tenantId');
+  
+  // Get ALL users in this tenant
+  const allUsersInTenant = await User.find({ tenantId })
+    .select('_id name email taskflowId isActive tenantId teams')
+    .sort('name');
+  
+  // Get teams
+  const myTeams = await Team.find({ createdBy: currentUserId })
+    .select('_id name members owner')
+    .populate('members.user', '_id name email taskflowId');
+  
+  const report = {
+    currentUser: {
+      id: currentUser?._id,
+      name: currentUser?.name,
+      email: currentUser?.email,
+      taskflowId: currentUser?.taskflowId,
+      tenantId: currentUser?.tenantId
+    },
+    tenantId,
+    allUsersInTenant: {
+      count: allUsersInTenant.length,
+      users: allUsersInTenant.map(u => ({
+        id: u._id,
+        name: u.name,
+        email: u.email,
+        taskflowId: u.taskflowId,
+        isActive: u.isActive,
+        tenantId: u.tenantId,
+        teamsCount: u.teams?.length || 0
+      }))
+    },
+    myTeams: myTeams.map(t => ({
+      id: t._id,
+      name: t.name,
+      memberCount: t.members?.length || 0,
+      members: (t.members || []).map(m => ({
+        userId: m.user?._id,
+        userName: m.user?.name,
+        email: m.user?.email,
+        taskflowId: m.user?.taskflowId
+      }))
+    }))
+  };
+  
+  console.log('✅ DEBUG INSPECT Result:', report);
+  res.status(200).json(report);
+}));
 
 // Get all users
 router.get('/', userController.getUsers);
