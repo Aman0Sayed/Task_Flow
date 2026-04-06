@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
+import { Trash2 } from "lucide-react";
 import Avatar from "../components/ui/Avatar";
 import AddTeamMemberModal from "../components/modals/AddTeamMemberModal";
 import AddTeamModal from "../components/modals/AddTeamModal";
@@ -19,6 +20,9 @@ const Team: React.FC = () => {
   const [hasAutoPromptedTeamCreate, setHasAutoPromptedTeamCreate] = useState(false);
   const [hasPendingJoinRequest, setHasPendingJoinRequest] = useState(false);
   const [pendingTeamName, setPendingTeamName] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [memberToDelete, setMemberToDelete] = useState<any | null>(null);
+  const [deletingMemberId, setDeletingMemberId] = useState<string | null>(null);
 
   const fetchTeamData = useCallback(async () => {
     try {
@@ -151,6 +155,37 @@ const Team: React.FC = () => {
 
   const handleCreateTeamSuccess = () => {
     fetchTeamData();
+  };
+
+  const handleRemoveMember = async () => {
+    if (!memberToDelete || !teams.length) return;
+
+    setDeletingMemberId(memberToDelete._id);
+    try {
+      const token = localStorage.getItem('token');
+      const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const teamId = teams[0]._id;
+      const memberId = memberToDelete._id;
+
+      const res = await fetch(`${BASE_URL}/api/teams/${teamId}/members/${memberId}`, {
+        method: 'DELETE',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+
+      if (res.ok) {
+        setShowDeleteConfirm(false);
+        setMemberToDelete(null);
+        fetchTeamData();
+      } else {
+        const errorData = await res.json();
+        alert('Error removing member: ' + (errorData.message || 'Unknown error'));
+      }
+    } catch (error) {
+      console.error('Error removing member:', error);
+      alert('Failed to remove member. Please try again.');
+    } finally {
+      setDeletingMemberId(null);
+    }
   };
 
   return (
@@ -339,6 +374,18 @@ const Team: React.FC = () => {
                         >
                           {roleLabel}{isCurrentUser ? " (You)" : ""}
                         </div>
+                        {!isCurrentUser && teams.length > 0 && (teams[0].owner?._id === user?.id || teams[0].owner === user?.id) && (
+                          <button
+                            onClick={() => {
+                              setMemberToDelete(member);
+                              setShowDeleteConfirm(true);
+                            }}
+                            className="mt-3 text-xs bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 px-3 py-1 rounded-md hover:bg-red-200 dark:hover:bg-red-900/50 flex items-center gap-1 transition"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                            Remove
+                          </button>
+                        )}
                       </div>
                     );
                   })}
@@ -404,6 +451,43 @@ const Team: React.FC = () => {
           fetchTeamData();
         }}
       />
+
+      {/* Delete Member Confirmation Modal */}
+      {showDeleteConfirm && memberToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
+            <div className="flex items-center justify-center w-12 h-12 mx-auto mb-4 bg-red-100 dark:bg-red-900/30 rounded-full">
+              <Trash2 className="w-6 h-6 text-red-600 dark:text-red-400" />
+            </div>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white text-center mb-2">
+              Remove Team Member?
+            </h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 text-center mb-6">
+              Are you sure you want to remove <span className="font-semibold">{memberToDelete.name}</span> from the team? This action cannot be undone.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  setMemberToDelete(null);
+                }}
+                disabled={deletingMemberId === memberToDelete._id}
+                className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleRemoveMember}
+                disabled={deletingMemberId === memberToDelete._id}
+                className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 flex items-center gap-2"
+              >
+                <Trash2 className="w-4 h-4" />
+                {deletingMemberId === memberToDelete._id ? 'Removing...' : 'Remove Member'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
