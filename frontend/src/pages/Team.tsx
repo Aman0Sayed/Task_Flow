@@ -349,46 +349,7 @@ const Team: React.FC = () => {
           </div>
         )}
 
-        <div className="bg-gray-50 dark:bg-gray-900 rounded-xl p-6 mt-8">
-          <h2 className="text-lg font-semibold text-gray-700 dark:text-gray-200 mb-4">
-            Some basic stats about your team activity
-          </h2>
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm text-left">
-              <thead>
-                <tr>
-                  <th className="py-2 px-4 text-gray-500">Stats name</th>
-                  <th className="py-2 px-4 text-gray-500">Monthly Stats</th>
-                  <th className="py-2 px-4 text-gray-500">Progress</th>
-                  <th className="py-2 px-4 text-gray-500">Last Month</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td className="py-2 px-4">Time in use</td>
-                  <td className="py-2 px-4">52 minutes</td>
-                  <td className="py-2 px-4 text-green-600 font-bold">+4.4%</td>
-                  <td className="py-2 px-4">+2.3%</td>
-                </tr>
-                <tr>
-                  <td className="py-2 px-4">Tasks done</td>
-                  <td className="py-2 px-4">126</td>
-                  <td className="py-2 px-4 text-green-600 font-bold">+9.2%</td>
-                  <td className="py-2 px-4">+7.1%</td>
-                </tr>
-                <tr>
-                  <td className="py-2 px-4">Responses</td>
-                  <td className="py-2 px-4">260</td>
-                  <td className="py-2 px-4 text-green-600 font-bold">+2.1%</td>
-                  <td className="py-2 px-4">+1.8%</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      <AddTeamMemberModal
+        <AddTeamMemberModal
         isOpen={showAddMember}
         onClose={() => setShowAddMember(false)}
         onSuccess={handleAddMemberSuccess}
