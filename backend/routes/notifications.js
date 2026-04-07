@@ -8,8 +8,19 @@ const router = express.Router();
 
 router.use(protect);
 
+const NOTIFICATIONS_DISABLED = true;
+
 // Get user notifications
 router.get('/', asyncHandler(async (req, res) => {
+  if (NOTIFICATIONS_DISABLED) {
+    return res.status(200).json({
+      success: true,
+      count: 0,
+      unreadCount: 0,
+      data: []
+    });
+  }
+
   const notifications = await Notification.find({
     recipient: req.user.id,
     tenantId: req.tenantId
@@ -38,6 +49,13 @@ router.get('/', asyncHandler(async (req, res) => {
 
 // Mark notification as read
 router.put('/:id/read', asyncHandler(async (req, res) => {
+  if (NOTIFICATIONS_DISABLED) {
+    return res.status(200).json({
+      success: true,
+      data: {}
+    });
+  }
+
   const notification = await Notification.findOne({
     _id: req.params.id,
     recipient: req.user.id,
@@ -61,6 +79,13 @@ router.put('/:id/read', asyncHandler(async (req, res) => {
 
 // Mark all notifications as read
 router.put('/read-all', asyncHandler(async (req, res) => {
+  if (NOTIFICATIONS_DISABLED) {
+    return res.status(200).json({
+      success: true,
+      message: 'Notifications are disabled'
+    });
+  }
+
   await Notification.updateMany(
     { recipient: req.user.id, tenantId: req.tenantId, isRead: false },
     { isRead: true }
@@ -74,6 +99,13 @@ router.put('/read-all', asyncHandler(async (req, res) => {
 
 // Delete notification
 router.delete('/:id', asyncHandler(async (req, res) => {
+  if (NOTIFICATIONS_DISABLED) {
+    return res.status(200).json({
+      success: true,
+      data: {}
+    });
+  }
+
   const notification = await Notification.findOneAndDelete({
     _id: req.params.id,
     recipient: req.user.id,
@@ -95,6 +127,13 @@ router.delete('/:id', asyncHandler(async (req, res) => {
 
 // Clear all notifications
 router.delete('/', asyncHandler(async (req, res) => {
+  if (NOTIFICATIONS_DISABLED) {
+    return res.status(200).json({
+      success: true,
+      message: 'Notifications are disabled'
+    });
+  }
+
   await Notification.deleteMany({
     recipient: req.user.id,
     tenantId: req.tenantId
