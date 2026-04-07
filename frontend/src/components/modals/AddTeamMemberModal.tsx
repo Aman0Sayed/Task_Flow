@@ -219,7 +219,7 @@ export default function AddTeamMemberModal({ isOpen, onClose, onSuccess }: AddTe
     setSelectedUser(user);
   }, []);
 
-  const handleSendInvitation = async () => {
+  const handleAddMember = async () => {
     if (!selectedUser || !currentTeamId) return;
 
     setInviting(true);
@@ -240,13 +240,13 @@ export default function AddTeamMemberModal({ isOpen, onClose, onSuccess }: AddTe
 
       if (!res.ok) {
         const errorData = await res.json();
-        throw new Error(errorData.error || 'Failed to send invitation');
+        throw new Error(errorData.error || 'Failed to add member');
       }
 
       onSuccess();
       onClose();
     } catch (err: any) {
-      setError(err.message || 'Error sending invitation');
+      setError(err.message || 'Error adding member');
     } finally {
       setInviting(false);
     }
@@ -260,7 +260,7 @@ export default function AddTeamMemberModal({ isOpen, onClose, onSuccess }: AddTe
         {/* Header */}
         <div className="p-6 border-b border-gray-200 dark:border-gray-700">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-xl font-semibold">Invite Team Member</h2>
+            <h2 className="text-xl font-semibold">Add Team Member</h2>
             <button
               onClick={onClose}
               className="rounded-full p-2 hover:bg-gray-100 dark:hover:bg-gray-700"
@@ -342,7 +342,7 @@ export default function AddTeamMemberModal({ isOpen, onClose, onSuccess }: AddTe
                           {user.name}
                         </p>
                         <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
-                          @{user.taskflowId} • {user.email}
+                          {user.taskflowId} • {user.email}
                         </p>
                       </div>
                       <div className={`text-xs px-2 py-1 rounded-full flex-shrink-0 ${
@@ -368,7 +368,7 @@ export default function AddTeamMemberModal({ isOpen, onClose, onSuccess }: AddTe
           {error && <div className="text-red-500 text-sm mb-4">{error}</div>}
           <div className="flex justify-between items-center">
             <div className="text-sm text-gray-600 dark:text-gray-400">
-              {selectedUser ? `Selected: ${selectedUser.name}` : 'Select a user to invite'}
+              {selectedUser ? `Selected: ${selectedUser.name}` : 'Select a user to add'}
             </div>
             <div className="flex gap-2">
               <button
@@ -379,12 +379,12 @@ export default function AddTeamMemberModal({ isOpen, onClose, onSuccess }: AddTe
                 Cancel
               </button>
               <button
-                onClick={handleSendInvitation}
+                onClick={handleAddMember}
                 disabled={!selectedUser || inviting}
                 className="rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 dark:bg-primary-700 dark:hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 <UserPlus className="h-4 w-4" />
-                {inviting ? 'Sending...' : 'Send Invitation'}
+                {inviting ? 'Adding...' : 'Add Member'}
               </button>
             </div>
           </div>
