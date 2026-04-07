@@ -354,10 +354,16 @@ exports.addMember = asyncHandler(async (req, res, next) => {
   });
   await team.save();
 
-  // Add team to user
-  await User.findByIdAndUpdate(req.body.userId, {
-    $push: { teams: req.params.id }
-  });
+  // Add team to user and align tenant/company details so team is visible.
+  const teamOwner = await User.findById(team.owner).select('companyName');
+  const userUpdate = {
+    $addToSet: { teams: team._id },
+    tenantId: team.tenantId
+  };
+  if (teamOwner?.companyName) {
+    userUpdate.companyName = teamOwner.companyName;
+  }
+  await User.findByIdAndUpdate(req.body.userId, userUpdate);
 
   res.status(200).json({
     success: true,
