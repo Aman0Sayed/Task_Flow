@@ -347,33 +347,22 @@ exports.addMember = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse('User is already a member', 400));
   }
 
-  // Create invitation (allow multiple invitations to be sent, e.g., for resending)
-  const invitation = await TeamInvitation.create({
-    team: req.params.id,
-    invitedUser: req.body.userId,
-    invitedBy: req.user.id,
-    role: req.body.role || 'member',
-    tenantId: req.tenantId
+  // Directly add user to team
+  team.members.push({
+    user: req.body.userId,
+    role: req.body.role || 'member'
   });
+  await team.save();
 
-  // Populate invitation details for notification
-  await invitation.populate('invitedBy', 'name email');
-  await invitation.populate('team', 'name');
-
-  // Create notification for the invited user
-  await Notification.create({
-    recipient: req.body.userId,
-    type: 'team_join_request',
-    title: `Team Invitation from ${invitation.invitedBy.name}`,
-    message: `You've been invited to join the team "${team.name}". Accept or reject this invitation.`,
-    link: '/team',
-    relatedTeam: req.params.id,
-    joinRequest: invitation._id
+  // Add team to user
+  await User.findByIdAndUpdate(req.body.userId, {
+    $push: { teams: req.params.id }
   });
 
   res.status(200).json({
     success: true,
-    data: invitation
+    message: 'User added to team successfully',
+    data: team
   });
 });
 
