@@ -15,7 +15,7 @@ const notificationSchema = new mongoose.Schema({
     type: String,
     enum: ['task_assigned', 'task_due', 'mention', 'project_invite', 
            'deadline_approaching', 'task_completed', 'comment_reply',
-           'team_join_request', 'team_join_accepted', 'team_join_rejected',
+           'team_join_request', 'team_invitation', 'team_join_accepted', 'team_join_rejected',
            'team_member_kicked', 'team_deleted', 'manager_account_deleted'],
     required: true
   },

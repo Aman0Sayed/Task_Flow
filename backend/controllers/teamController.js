@@ -322,6 +322,12 @@ exports.leaveTeam = asyncHandler(async (req, res, next) => {
 
 // Send team invitation (replaces direct member addition)
 exports.addMember = asyncHandler(async (req, res, next) => {
+  const { userId, role } = req.body;
+
+  if (!userId) {
+    return next(new ErrorResponse('User ID is required', 400));
+  }
+
   const team = await Team.findOne({
     _id: req.params.id,
     tenantId: req.tenantId
@@ -340,35 +346,78 @@ exports.addMember = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse('Not authorized to invite members', 403));
   }
 
+  const invitedUser = await User.findById(userId).select('_id');
+  if (!invitedUser) {
+    return next(new ErrorResponse('User not found', 404));
+  }
+
   // Check if already a member
-  const isMember = team.members.some(member => member.user.equals(req.body.userId));
+  const isMember = team.members.some(member => member.user.equals(userId));
 
   if (isMember) {
     return next(new ErrorResponse('User is already a member', 400));
   }
 
-  // Directly add user to team
-  team.members.push({
-    user: req.body.userId,
-    role: req.body.role || 'member'
+  const existingPending = await TeamInvitation.findOne({
+    team: team._id,
+    invitedUser: userId,
+    status: 'pending'
   });
-  await team.save();
 
-  // Add team to user and align tenant/company details so team is visible.
-  const teamOwner = await User.findById(team.owner).select('companyName');
-  const userUpdate = {
-    $addToSet: { teams: team._id },
-    tenantId: team.tenantId
-  };
-  if (teamOwner?.companyName) {
-    userUpdate.companyName = teamOwner.companyName;
+  if (existingPending) {
+    const isJoinRequest = existingPending.invitedBy.toString() === existingPending.invitedUser.toString();
+    if (isJoinRequest) {
+      return next(new ErrorResponse('This user already has a pending join request for this team', 400));
+    }
+
+    // Re-send pending invitation instead of blocking manager action.
+    existingPending.invitedBy = req.user.id;
+    existingPending.role = role || existingPending.role || 'member';
+    existingPending.invitedAt = new Date();
+    await existingPending.save();
+
+    await Notification.create({
+      recipient: userId,
+      tenantId: team.tenantId,
+      type: 'team_invitation',
+      title: 'Team Invitation',
+      message: `${req.user.name} invited you to join "${team.name}".`,
+      link: '/team',
+      relatedTeam: team._id,
+      joinRequest: existingPending._id
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: 'Invitation already pending. Notification sent again.',
+      data: existingPending
+    });
   }
-  await User.findByIdAndUpdate(req.body.userId, userUpdate);
+
+  const invitation = await TeamInvitation.create({
+    team: team._id,
+    invitedUser: userId,
+    invitedBy: req.user.id,
+    role: role || 'member',
+    tenantId: team.tenantId,
+    status: 'pending'
+  });
+
+  await Notification.create({
+    recipient: userId,
+    tenantId: team.tenantId,
+    type: 'team_invitation',
+    title: 'Team Invitation',
+    message: `${req.user.name} invited you to join "${team.name}".`,
+    link: '/team',
+    relatedTeam: team._id,
+    joinRequest: invitation._id
+  });
 
   res.status(200).json({
     success: true,
-    message: 'User added to team successfully',
-    data: team
+    message: 'Team invitation sent successfully',
+    data: invitation
   });
 });
 
@@ -406,8 +455,32 @@ exports.removeMember = asyncHandler(async (req, res, next) => {
     $pull: { teams: team._id }
   });
 
+  // Clear stale pending invites for this team/user so manager can invite again later.
+  const stalePendingInvites = await TeamInvitation.find({
+    team: team._id,
+    invitedUser: req.params.userId,
+    status: 'pending'
+  }).select('_id');
+
+  const stalePendingInviteIds = stalePendingInvites.map((inv) => inv._id);
+  if (stalePendingInviteIds.length > 0) {
+    await TeamInvitation.deleteMany({
+      _id: { $in: stalePendingInviteIds }
+    });
+  }
+
+  await Notification.deleteMany({
+    recipient: req.params.userId,
+    type: 'team_invitation',
+    $or: [
+      { relatedTeam: team._id },
+      ...(stalePendingInviteIds.length > 0 ? [{ joinRequest: { $in: stalePendingInviteIds } }] : [])
+    ]
+  });
+
   await Notification.create({
     recipient: req.params.userId,
+    tenantId: team.tenantId,
     type: 'team_member_kicked',
     title: 'Removed From Team',
     message: 'You have been removed from the team.',
@@ -514,7 +587,7 @@ exports.addMemberAndCreateUser = asyncHandler(async (req, res, next) => {
 exports.getTeamInvitations = asyncHandler(async (req, res, next) => {
   const invitations = await TeamInvitation.find({
     invitedUser: req.user.id,
-    tenantId: req.tenantId
+    status: 'pending'
   })
   .populate('team', 'name description')
   .populate('invitedBy', 'name email')
@@ -532,7 +605,6 @@ exports.acceptInvitation = asyncHandler(async (req, res, next) => {
   const invitation = await TeamInvitation.findOne({
     _id: req.params.id,
     invitedUser: req.user.id,
-    tenantId: req.tenantId,
     status: 'pending'
   });
 
@@ -544,6 +616,21 @@ exports.acceptInvitation = asyncHandler(async (req, res, next) => {
   invitation.status = 'accepted';
   invitation.respondedAt = new Date();
   await invitation.save();
+
+  // If there are duplicate pending invites for the same team/user, close them as well.
+  const duplicatePendingInvites = await TeamInvitation.find({
+    team: invitation.team,
+    invitedUser: req.user.id,
+    status: 'pending',
+    _id: { $ne: invitation._id }
+  }).select('_id');
+  const duplicatePendingInviteIds = duplicatePendingInvites.map((inv) => inv._id);
+  if (duplicatePendingInviteIds.length > 0) {
+    await TeamInvitation.updateMany(
+      { _id: { $in: duplicatePendingInviteIds } },
+      { $set: { status: 'accepted', respondedAt: new Date() } }
+    );
+  }
 
   // Add user to team
   const team = await Team.findById(invitation.team);
@@ -573,6 +660,7 @@ exports.acceptInvitation = asyncHandler(async (req, res, next) => {
     const currentUser = await User.findById(req.user.id).select('name');
     await Notification.create({
       recipient: invitation.invitedBy,
+      tenantId: team.tenantId,
       type: 'team_join_accepted',
       title: 'Invitation Accepted',
       message: `${currentUser.name} has accepted your invitation to join the team "${team.name}".`,
@@ -580,6 +668,14 @@ exports.acceptInvitation = asyncHandler(async (req, res, next) => {
       relatedTeam: team._id
     });
   }
+
+  await Notification.deleteMany({
+    recipient: req.user.id,
+    type: 'team_invitation',
+    joinRequest: {
+      $in: [invitation._id, ...duplicatePendingInviteIds]
+    }
+  });
 
   res.status(200).json({
     success: true,
@@ -592,7 +688,6 @@ exports.rejectInvitation = asyncHandler(async (req, res, next) => {
   const invitation = await TeamInvitation.findOne({
     _id: req.params.id,
     invitedUser: req.user.id,
-    tenantId: req.tenantId,
     status: 'pending'
   });
 
@@ -605,16 +700,41 @@ exports.rejectInvitation = asyncHandler(async (req, res, next) => {
   invitation.respondedAt = new Date();
   await invitation.save();
 
+  // If there are duplicate pending invites for the same team/user, close them as well.
+  const duplicatePendingInvites = await TeamInvitation.find({
+    team: invitation.team,
+    invitedUser: req.user.id,
+    status: 'pending',
+    _id: { $ne: invitation._id }
+  }).select('_id');
+  const duplicatePendingInviteIds = duplicatePendingInvites.map((inv) => inv._id);
+  if (duplicatePendingInviteIds.length > 0) {
+    await TeamInvitation.updateMany(
+      { _id: { $in: duplicatePendingInviteIds } },
+      { $set: { status: 'rejected', respondedAt: new Date() } }
+    );
+  }
+
   // Create notification for the inviter that the invitation was rejected
   const currentUser = await User.findById(req.user.id).select('name');
-  const team = await Team.findById(invitation.team).select('name');
+  const team = await Team.findById(invitation.team).select('name tenantId');
+  const teamName = team?.name || 'the team';
   await Notification.create({
     recipient: invitation.invitedBy,
+    tenantId: team?.tenantId,
     type: 'team_join_rejected',
     title: 'Invitation Rejected',
-    message: `${currentUser.name} has declined your invitation to join the team "${team.name}".`,
+    message: `${currentUser.name} has declined your invitation to join "${teamName}".`,
     link: '/team',
     relatedTeam: invitation.team
+  });
+
+  await Notification.deleteMany({
+    recipient: req.user.id,
+    type: 'team_invitation',
+    joinRequest: {
+      $in: [invitation._id, ...duplicatePendingInviteIds]
+    }
   });
 
   res.status(200).json({

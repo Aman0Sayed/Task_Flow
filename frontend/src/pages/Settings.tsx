@@ -96,6 +96,16 @@ export default function Settings() {
       getOwnerId(currentTeam) === (user?.id || null)
   );
 
+  // Helper to safely parse API responses that might not be JSON (e.g., rate-limit text responses)
+  const parseApiResponse = async (res: Response) => {
+    const text = await res.text();
+    try {
+      return JSON.parse(text);
+    } catch {
+      return { success: res.ok, error: text, _rawText: text, status: res.status, statusText: res.statusText };
+    }
+  };
+
   const fetchTeams = async () => {
     const authToken = token || localStorage.getItem('token');
     if (!authToken) return;
@@ -106,10 +116,11 @@ export default function Settings() {
       const res = await fetch(`${BASE_URL}/api/teams`, {
         headers: { Authorization: `Bearer ${authToken}` }
       });
-      const data = await res.json();
+      const data = await parseApiResponse(res);
 
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || data.message || 'Failed to fetch team data');
+      if (!res.ok || !data?.success) {
+        const errMsg = data?.error || data?.message || data?._rawText || 'Failed to fetch team data';
+        throw new Error(errMsg);
       }
 
       const fetchedTeams = Array.isArray(data.data) ? data.data : [];
@@ -174,10 +185,11 @@ export default function Settings() {
         },
         body: JSON.stringify({ name: teamName.trim() })
       });
-      const data = await res.json();
+      const data = await parseApiResponse(res);
 
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || data.message || 'Failed to rename team');
+      if (!res.ok || !data?.success) {
+        const errMsg = data?.error || data?.message || data?._rawText || 'Failed to rename team';
+        throw new Error(errMsg);
       }
 
       setMessage('Team name updated.');
@@ -215,10 +227,11 @@ export default function Settings() {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${authToken}` }
       });
-      const data = await res.json();
+      const data = await parseApiResponse(res);
 
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || data.message || 'Failed to delete team');
+      if (!res.ok || !data?.success) {
+        const errMsg = data?.error || data?.message || data?._rawText || 'Failed to delete team';
+        throw new Error(errMsg);
       }
 
       setMessage('Team deleted successfully.');
@@ -259,10 +272,11 @@ export default function Settings() {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${authToken}` }
       });
-      const data = await res.json();
+      const data = await parseApiResponse(res);
 
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || data.message || 'Failed to remove member');
+      if (!res.ok || !data?.success) {
+        const errMsg = data?.error || data?.message || data?._rawText || 'Failed to remove member';
+        throw new Error(errMsg);
       }
 
       setMessage(`${memberName} removed from team.`);
@@ -299,10 +313,11 @@ export default function Settings() {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${authToken}` }
       });
-      const data = await res.json();
+      const data = await parseApiResponse(res);
 
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || data.message || 'Failed to delete account');
+      if (!res.ok || !data?.success) {
+        const errMsg = data?.error || data?.message || data?._rawText || 'Failed to delete account';
+        throw new Error(errMsg);
       }
 
       localStorage.removeItem('token');
@@ -339,10 +354,11 @@ export default function Settings() {
         method: 'DELETE',
         headers: { Authorization: `Bearer ${authToken}` }
       });
-      const data = await res.json();
+      const data = await parseApiResponse(res);
 
-      if (!res.ok || !data.success) {
-        throw new Error(data.error || data.message || 'Failed to delete company');
+      if (!res.ok || !data?.success) {
+        const errMsg = data?.error || data?.message || data?._rawText || 'Failed to delete company';
+        throw new Error(errMsg);
       }
 
       setMessage('Company deleted successfully.');

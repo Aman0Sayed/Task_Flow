@@ -240,13 +240,13 @@ export default function AddTeamMemberModal({ isOpen, onClose, onSuccess }: AddTe
 
       if (!res.ok) {
         const errorData = await res.json();
-        throw new Error(errorData.error || 'Failed to add member');
+        throw new Error(errorData.error || errorData.message || 'Failed to send invitation');
       }
 
       onSuccess();
       onClose();
     } catch (err: any) {
-      setError(err.message || 'Error adding member');
+      setError(err.message || 'Error sending invitation');
     } finally {
       setInviting(false);
     }
@@ -384,7 +384,7 @@ export default function AddTeamMemberModal({ isOpen, onClose, onSuccess }: AddTe
                 className="rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 dark:bg-primary-700 dark:hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
               >
                 <UserPlus className="h-4 w-4" />
-                {inviting ? 'Adding...' : 'Add Member'}
+                {inviting ? 'Sending...' : 'Send Invite'}
               </button>
             </div>
           </div>

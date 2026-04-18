@@ -196,14 +196,19 @@ exports.deleteTask = asyncHandler(async (req, res, next) => {
     return next(new ErrorResponse(`Task not found with id of ${req.params.id}`, 404));
   }
 
-  await task.remove();
+  // Delete the task using the model to avoid calling instance methods that
+  // might not exist on plain objects in some environments.
+  const deletedTask = await Task.findByIdAndDelete(req.params.id);
 
-  // Emit socket event
-  req.io.to(`project-${task.project}`).emit('task-deleted', {
-    taskId: task._id,
-    projectId: task.project,
-    user: req.user
-  });
+  // Emit socket event if socket support is available
+  if (req.io && typeof req.io.to === 'function') {
+    const projectId = deletedTask?.project || task.project;
+    req.io.to(`project-${projectId}`).emit('task-deleted', {
+      taskId: deletedTask?._id || task._id,
+      projectId,
+      user: req.user
+    });
+  }
 
   res.status(200).json({
     success: true,
@@ -233,6 +238,7 @@ exports.addComment = asyncHandler(async (req, res, next) => {
     type: 'comment_added',
     description: `${req.user.name} commented on task "${task.title}"`,
     user: req.user.id,
+    tenantId: req.tenantId,
     project: task.project,
     task: task._id,
     metadata: { comment: req.body.text }
@@ -242,6 +248,7 @@ exports.addComment = asyncHandler(async (req, res, next) => {
   if (task.assignee && !task.assignee.equals(req.user.id)) {
     await Notification.create({
       recipient: task.assignee,
+      tenantId: req.tenantId,
       type: 'comment_reply',
       title: 'New Comment',
       message: `${req.user.name} commented on "${task.title}"`,
@@ -250,17 +257,27 @@ exports.addComment = asyncHandler(async (req, res, next) => {
       relatedTask: task._id
     });
   }
+  
+  // Re-fetch task with populated relations so frontend can update comments without a full refetch
+  const populatedTask = await Task.findById(task._id)
+    .populate('assignee', 'name email avatar')
+    .populate('assignedBy', 'name email avatar')
+    .populate('project', 'name')
+    .populate('comments.user', 'name email avatar');
 
-  // Emit socket event
-  req.io.to(`project-${task.project}`).emit('comment-added', {
-    task,
-    comment,
-    user: req.user
-  });
+  // Emit socket event when socket support is available
+  if (req.io && typeof req.io.to === 'function') {
+    const projectId = populatedTask.project?._id || populatedTask.project;
+    req.io.to(`project-${projectId}`).emit('comment-added', {
+      task: populatedTask,
+      comment,
+      user: req.user
+    });
+  }
 
   res.status(200).json({
     success: true,
-    data: task
+    data: populatedTask
   });
 });
 

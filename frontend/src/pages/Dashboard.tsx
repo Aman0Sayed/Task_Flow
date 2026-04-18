@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { BarChart, CheckCheck, Clock, Users, Plus, AlertCircle, TrendingUp } from 'lucide-react';
+import { BarChart, CheckCheck, Clock, Users, Plus, TrendingUp } from 'lucide-react';
 import StatsCard from '../components/dashboard/StatsCard';
 import ProjectCard from '../components/dashboard/ProjectCard';
 import TaskCard from '../components/dashboard/TaskCard';
@@ -171,16 +171,7 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* Alert section if there are overdue items */}
-      {stats.overdueItems > 0 && !isLoading && (
-        <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 flex items-start gap-3">
-          <AlertCircle className="w-5 h-5 text-red-600 dark:text-red-400 flex-shrink-0 mt-0.5" />
-          <div>
-            <h3 className="font-semibold text-red-900 dark:text-red-100">⏰ {stats.overdueItems} Overdue Items</h3>
-            <p className="text-sm text-red-700 dark:text-red-300">You have {stats.overdueItems} task{stats.overdueItems !== 1 ? 's' : ''} that are overdue. Please prioritize completing them.</p>
-          </div>
-        </div>
-      )}
+      {/* Overdue alert removed per request */}
 
       {/* Upcoming Deadlines Alert */}
       {stats.upcomingDeadlines > 0 && !isLoading && stats.overdueItems === 0 && (

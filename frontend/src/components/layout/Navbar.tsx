@@ -19,6 +19,7 @@ export default function Navbar({ children }: NavbarProps) {
   const [searchTerm, setSearchTerm] = useState('');
   const [notifications, setNotifications] = useState<any[]>([]);
   const [processingJoinRequestId, setProcessingJoinRequestId] = useState<string | null>(null);
+  const [clearingNotifications, setClearingNotifications] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const [companyNameFallback, setCompanyNameFallback] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -64,8 +65,8 @@ export default function Navbar({ children }: NavbarProps) {
     }
   };
 
-  // Handle accept/reject team join request
-  const handleJoinRequest = async (notification: any, action: 'accept' | 'reject') => {
+  // Handle accept/reject actions for team join requests and team invitations
+  const handleTeamNotificationAction = async (notification: any, action: 'accept' | 'reject') => {
     try {
       if (processingJoinRequestId === notification._id) {
         return;
@@ -75,6 +76,11 @@ export default function Navbar({ children }: NavbarProps) {
       const token = localStorage.getItem('token');
       const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
       const requestId = notification?.joinRequest?._id || notification?.joinRequest;
+      const relatedTeamId =
+        notification?.relatedTeam?._id ||
+        notification?.relatedTeam ||
+        notification?.joinRequest?.team?._id ||
+        notification?.joinRequest?.team;
 
       if (!requestId) {
         // If payload is incomplete, remove stale notification from list.
@@ -83,9 +89,21 @@ export default function Navbar({ children }: NavbarProps) {
         setUnreadCount((prev) => Math.max(0, prev - (notification.isRead ? 0 : 1)));
         return;
       }
-      
+
       const endpoint = action === 'accept' ? 'accept' : 'reject';
-      const url = `${BASE_URL}/api/teams/invitations/${requestId}/${endpoint}`;
+      let url = '';
+
+      if (notification.type === 'team_invitation') {
+        url = `${BASE_URL}/api/teams/invitations/${requestId}/${endpoint}`;
+      } else if (notification.type === 'team_join_request' && relatedTeamId) {
+        url = `${BASE_URL}/api/teams/${relatedTeamId}/join-requests/${requestId}/${endpoint}`;
+      } else {
+        console.warn('Unsupported actionable notification payload', notification);
+        setNotifications((prev) => prev.filter((n) => n._id !== notification._id));
+        setUnreadCount((prev) => Math.max(0, prev - (notification.isRead ? 0 : 1)));
+        return;
+      }
+
       console.log(`Calling ${url}`);
       
       const res = await fetch(url, {
@@ -108,10 +126,10 @@ export default function Navbar({ children }: NavbarProps) {
       } else {
         const errorData = await res.json();
         console.error('Error response:', errorData);
-        throw new Error(errorData.message || `Failed to ${action} invitation`);
+        throw new Error(errorData.message || `Failed to ${action} request`);
       }
     } catch (error) {
-      console.error(`Error ${action}ing invitation:`, error);
+      console.error(`Error ${action}ing team notification action:`, error);
     } finally {
       setProcessingJoinRequestId(null);
     }
@@ -137,6 +155,35 @@ export default function Navbar({ children }: NavbarProps) {
       setUnreadCount(prev => Math.max(0, prev - 1));
     } catch (error) {
       console.error('Error marking notification as read:', error);
+    }
+  };
+
+  const clearAllNotifications = async () => {
+    try {
+      if (clearingNotifications) {
+        return;
+      }
+
+      setClearingNotifications(true);
+      const token = localStorage.getItem('token');
+      const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
+      const res = await fetch(`${BASE_URL}/api/notifications`, {
+        method: 'DELETE',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData?.message || 'Failed to clear notifications');
+      }
+
+      setNotifications([]);
+      setUnreadCount(0);
+    } catch (error) {
+      console.error('Error clearing notifications:', error);
+    } finally {
+      setClearingNotifications(false);
     }
   };
 
@@ -260,8 +307,18 @@ export default function Navbar({ children }: NavbarProps) {
             
             {showNotifications && (
               <div className="absolute right-0 mt-2 w-80 origin-top-right rounded-md bg-white shadow-lg ring-1 ring-black ring-opacity-5 dark:bg-gray-800 dark:ring-gray-700">
-                <div className="p-3 border-b dark:border-gray-700">
+                <div className="p-3 border-b dark:border-gray-700 flex items-center justify-between gap-3">
                   <h3 className="text-sm font-semibold">Notifications</h3>
+                  {notifications.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={clearAllNotifications}
+                      disabled={clearingNotifications}
+                      className="text-xs font-medium text-red-600 hover:text-red-700 disabled:opacity-60 disabled:cursor-not-allowed dark:text-red-400 dark:hover:text-red-300"
+                    >
+                      {clearingNotifications ? 'Clearing...' : 'Clear'}
+                    </button>
+                  )}
                 </div>
                 <div className="max-h-[calc(100vh-200px)] overflow-y-auto">
                   {loading ? (
@@ -291,12 +348,12 @@ export default function Navbar({ children }: NavbarProps) {
                               <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
                                 {notification.message}
                               </p>
-                              {notification.type === 'team_join_request' && notification.joinRequest && (
+                              {(notification.type === 'team_join_request' || notification.type === 'team_invitation') && notification.joinRequest && (
                                 <div className="flex gap-2 mt-2">
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      handleJoinRequest(notification, 'accept');
+                                      handleTeamNotificationAction(notification, 'accept');
                                     }}
                                     disabled={processingJoinRequestId === notification._id}
                                     className="inline-flex items-center px-2 py-1 text-xs font-medium text-green-700 bg-green-100 rounded-md hover:bg-green-200 dark:text-green-400 dark:bg-green-900/30"
@@ -307,7 +364,7 @@ export default function Navbar({ children }: NavbarProps) {
                                   <button
                                     onClick={(e) => {
                                       e.stopPropagation();
-                                      handleJoinRequest(notification, 'reject');
+                                      handleTeamNotificationAction(notification, 'reject');
                                     }}
                                     disabled={processingJoinRequestId === notification._id}
                                     className="inline-flex items-center px-2 py-1 text-xs font-medium text-red-700 bg-red-100 rounded-md hover:bg-red-200 dark:text-red-400 dark:bg-red-900/30"

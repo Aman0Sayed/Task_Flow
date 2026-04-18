@@ -6,7 +6,7 @@ import NewTaskModal from '../components/modals/NewTaskModal';
 import { isManager } from '../lib/managerUtils';
 import { useAppSelector } from '../hooks/hook';
 import type { RootState } from '../app/store';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useData } from '../context/DataContext';
 import { TaskCardSkeleton } from '../components/ui/skeleton';
 
@@ -14,6 +14,7 @@ import { TaskCardSkeleton } from '../components/ui/skeleton';
 // so TaskCard works without type errors
 interface Task {
   id: string;
+  _id?: string;
   title: string;
   description: string;
   status: 'To Do' | 'In Progress' | 'Review' | 'Completed';
@@ -190,7 +191,7 @@ export default function Tasks() {
       ) : view === 'grid' ? (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {filteredTasks.map(task => (
-            <TaskCard key={task.id} task={task} />
+            <TaskCard key={task.id || task._id} task={task} />
           ))}
           
           {filteredTasks.length === 0 && (
@@ -222,14 +223,14 @@ export default function Tasks() {
             <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
               {filteredTasks.map((task) => (
                 <tr 
-                  key={task.id}
+                  key={task.id || task._id}
                   className="hover:bg-gray-50 dark:hover:bg-gray-800"
                 >
                   <td className="whitespace-nowrap px-6 py-4">
                     <div>
-                      <a href={`/tasks/${task.id}`} className="font-medium hover:text-primary-600 dark:hover:text-primary-400">
+                      <Link to={`/tasks/${task.id || task._id}`} className="font-medium hover:text-primary-600 dark:hover:text-primary-400">
                         {task.title}
-                      </a>
+                      </Link>
                       <p className="text-sm text-gray-500 dark:text-gray-400">
                         {task.project?.name}
                       </p>
