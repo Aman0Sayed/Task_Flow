@@ -64,7 +64,7 @@ function Login() {
           <div className="relative h-full flex flex-col justify-center p-12 text-white">
             <div className="animate-float">
               <h2 className="text-4xl font-bold mb-6">Welcome to TaskFlow</h2>
-              <p className="text-xl text-primary-100 mb-8">
+              <p className="text-xl text-gray-100 mb-8">
                 Your all-in-one solution for project management and team collaboration.
               </p>
               <div className="space-y-6">
@@ -72,19 +72,19 @@ function Login() {
                   <div className="flex-shrink-0 w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center">
                     <span className="text-2xl">🚀</span>
                   </div>
-                  <p className="text-lg">Streamline your workflow and boost productivity</p>
+                  <p className="text-lg text-white font-medium">Streamline your workflow and boost productivity</p>
                 </div>
                 <div className="flex items-center space-x-4 bg-white/10 p-4 rounded-lg backdrop-blur-md">
                   <div className="flex-shrink-0 w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center">
                     <span className="text-2xl">👥</span>
                   </div>
-                  <p className="text-lg">Collaborate seamlessly with your team</p>
+                  <p className="text-lg text-white font-medium">Collaborate seamlessly with your team</p>
                 </div>
                 <div className="flex items-center space-x-4 bg-white/10 p-4 rounded-lg backdrop-blur-md">
                   <div className="flex-shrink-0 w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center">
                     <span className="text-2xl">📊</span>
                   </div>
-                  <p className="text-lg">Track progress with real-time analytics</p>
+                  <p className="text-lg text-white font-medium">Track progress with real-time analytics</p>
                 </div>
               </div>
             </div>
