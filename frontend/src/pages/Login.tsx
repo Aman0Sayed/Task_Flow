@@ -44,8 +44,8 @@ function Login() {
             className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
             aria-label="Toggle theme"
           >
-            <Sun className="hidden dark:inline-block w-5 h-5 text-gray-300" />
-            <Moon className="inline-block dark:hidden w-5 h-5 text-gray-700" />
+            <Sun className="hidden dark:inline-block w-5 h-5 text-yellow-400" />
+            <Moon className="inline-block dark:hidden w-5 h-5 text-gray-600" />
           </button>
         </div>
       </header>
@@ -57,34 +57,35 @@ function Login() {
           </div>
         </div>
 
-        <div className="hidden lg:block lg:w-1/2 relative overflow-hidden">
-          <div className="absolute inset-0 bg-auth-pattern bg-cover bg-center">
-            <div className="absolute inset-0 bg-gradient-to-br from-primary-600/90 to-accent-600/90 backdrop-blur-sm"></div>
-          </div>
-          <div className="relative h-full flex flex-col justify-center p-12 text-white">
-            <div className="animate-float">
-              <h2 className="text-4xl font-bold mb-6">Welcome to TaskFlow</h2>
-              <p className="text-xl text-gray-100 mb-8">
+        <div className="hidden lg:block lg:w-1/2 relative overflow-hidden bg-gradient-to-br from-primary-600 to-accent-600 dark:from-gray-900 dark:to-gray-800">
+          <div className="absolute inset-0 bg-black/0 dark:bg-black/0"></div>
+          <div className="relative h-full flex flex-col justify-center p-12">
+            <div className="absolute inset-0 opacity-0 dark:opacity-100">
+              <div className="absolute inset-0 bg-gradient-to-br from-primary-600/90 to-accent-600/90 backdrop-blur-sm"></div>
+            </div>
+            <div className="relative z-10 animate-float">
+              <h2 className="text-4xl font-bold mb-6 text-white drop-shadow-lg">Welcome to TaskFlow</h2>
+              <p className="text-xl text-white/90 mb-8 drop-shadow-md">
                 Your all-in-one solution for project management and team collaboration.
               </p>
               <div className="space-y-6">
-                <div className="flex items-center space-x-4 bg-white/10 p-4 rounded-lg backdrop-blur-md">
-                  <div className="flex-shrink-0 w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center">
+                <div className="flex items-center space-x-4 bg-white/15 backdrop-blur-md p-4 rounded-lg border border-white/20">
+                  <div className="flex-shrink-0 w-12 h-12 bg-white/30 rounded-lg flex items-center justify-center">
                     <span className="text-2xl">🚀</span>
                   </div>
-                  <p className="text-lg text-white font-medium">Streamline your workflow and boost productivity</p>
+                  <p className="text-lg text-white font-medium drop-shadow-md">Streamline your workflow and boost productivity</p>
                 </div>
-                <div className="flex items-center space-x-4 bg-white/10 p-4 rounded-lg backdrop-blur-md">
-                  <div className="flex-shrink-0 w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center">
+                <div className="flex items-center space-x-4 bg-white/15 backdrop-blur-md p-4 rounded-lg border border-white/20">
+                  <div className="flex-shrink-0 w-12 h-12 bg-white/30 rounded-lg flex items-center justify-center">
                     <span className="text-2xl">👥</span>
                   </div>
-                  <p className="text-lg text-white font-medium">Collaborate seamlessly with your team</p>
+                  <p className="text-lg text-white font-medium drop-shadow-md">Collaborate seamlessly with your team</p>
                 </div>
-                <div className="flex items-center space-x-4 bg-white/10 p-4 rounded-lg backdrop-blur-md">
-                  <div className="flex-shrink-0 w-12 h-12 bg-white/20 rounded-lg flex items-center justify-center">
+                <div className="flex items-center space-x-4 bg-white/15 backdrop-blur-md p-4 rounded-lg border border-white/20">
+                  <div className="flex-shrink-0 w-12 h-12 bg-white/30 rounded-lg flex items-center justify-center">
                     <span className="text-2xl">📊</span>
                   </div>
-                  <p className="text-lg text-white font-medium">Track progress with real-time analytics</p>
+                  <p className="text-lg text-white font-medium drop-shadow-md">Track progress with real-time analytics</p>
                 </div>
               </div>
             </div>

@@ -126,7 +126,7 @@ function SignupForm() {
         <h2 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
           Create an account
         </h2>
-        <p className="text-gray-700 dark:text-gray-400">
+        <p className="text-gray-600 dark:text-gray-400">
           Sign up to start using TaskFlow
         </p>
       </div>
@@ -163,7 +163,7 @@ function SignupForm() {
       </div>
 
       {formError && (
-        <div className="p-3 bg-error-50 border border-error-200 text-error-800 dark:bg-error-900/30 dark:border-error-800 dark:text-error-400 rounded-lg animate-fade-in">
+        <div className="p-3 bg-error-50 border border-error-200 text-error-900 dark:bg-error-900/30 dark:border-error-800 dark:text-error-400 rounded-lg animate-fade-in">
           {formError}
         </div>
       )}
@@ -309,7 +309,7 @@ function SignupForm() {
         disabled={isLoading}
         className="w-full flex justify-center items-center py-2.5 px-4 border border-transparent rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 
           focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 
-          dark:bg-primary-700 dark:hover:bg-primary-600 transition duration-150 ease-in-out"
+          dark:bg-primary-700 dark:hover:bg-primary-600 dark:text-white transition duration-150 ease-in-out"
       >
         {isLoading ? (
           <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
@@ -320,7 +320,7 @@ function SignupForm() {
       </button>
 
       <div className="text-center mt-4">
-        <p className="text-sm text-gray-700 dark:text-gray-400">
+        <p className="text-sm text-gray-600 dark:text-gray-300">
           Already have an account?{' '}
           <Link to="/login" className="font-medium text-primary-600 hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300">
             Sign in
