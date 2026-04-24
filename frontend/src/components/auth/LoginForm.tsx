@@ -62,7 +62,7 @@ function LoginForm() {
       </div>
 
       {formError && (
-        <div className="p-3 bg-error-50 border border-error-200 text-error-800 dark:bg-error-900/30 dark:border-error-800 dark:text-error-400 rounded-lg animate-fade-in">
+        <div className="p-3 bg-error-50 border border-error-200 text-error-900 dark:bg-error-900/30 dark:border-error-800 dark:text-error-400 rounded-lg animate-fade-in">
           {formError}
         </div>
       )}
@@ -74,7 +74,7 @@ function LoginForm() {
             </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Mail size={18} className="text-gray-400" />
+                <Mail size={18} className="text-gray-500 dark:text-gray-400" />
               </div>
               <input
                 id="email"
@@ -82,7 +82,7 @@ function LoginForm() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="name@example.com"
-                className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 dark:border-gray-700 rounded-md shadow-sm placeholder-gray-400 
+                className="block w-full pl-10 pr-3 py-2.5 border border-gray-300 dark:border-gray-700 rounded-md shadow-sm placeholder-gray-500 dark:placeholder-gray-400
                   focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500
                   bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
               />
@@ -95,7 +95,7 @@ function LoginForm() {
             </label>
             <div className="relative">
               <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                <Lock size={18} className="text-gray-400" />
+                <Lock size={18} className="text-gray-500 dark:text-gray-400" />
               </div>
               <input
                 id="password"
@@ -103,7 +103,7 @@ function LoginForm() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="block w-full pl-10 pr-10 py-2.5 border border-gray-300 dark:border-gray-700 rounded-md shadow-sm placeholder-gray-400 
+                className="block w-full pl-10 pr-10 py-2.5 border border-gray-300 dark:border-gray-700 rounded-md shadow-sm placeholder-gray-500 dark:placeholder-gray-400
                   focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-primary-500
                   bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
               />
@@ -113,9 +113,9 @@ function LoginForm() {
                 className="absolute inset-y-0 right-0 pr-3 flex items-center"
               >
                 {showPassword ? (
-                  <EyeOff size={18} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" />
+                  <EyeOff size={18} className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300" />
                 ) : (
-                  <Eye size={18} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" />
+                  <Eye size={18} className="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300" />
                 )}
               </button>
             </div>
@@ -127,7 +127,7 @@ function LoginForm() {
                 id="remember-me"
                 type="checkbox"
                 className="h-4 w-4 text-primary-600 focus:ring-primary-500
-                  border-gray-300 dark:border-gray-700 rounded"
+                  border-gray-300 dark:border-gray-700 rounded bg-white dark:bg-gray-800"
               />
               <label htmlFor="remember-me" className="ml-2 block text-sm text-gray-700 dark:text-gray-300">
                 Remember me
@@ -144,7 +144,7 @@ function LoginForm() {
         disabled={isLoading}
         className="w-full flex justify-center items-center py-2.5 px-4 border border-transparent rounded-md shadow-sm text-white bg-primary-600 hover:bg-primary-700 
           focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-500 
-          dark:bg-primary-700 dark:hover:bg-primary-600 transition duration-150 ease-in-out"
+          dark:bg-primary-700 dark:hover:bg-primary-600 dark:text-white transition duration-150 ease-in-out"
       >
         {isLoading ? (
           <div className="h-5 w-5 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
@@ -155,7 +155,7 @@ function LoginForm() {
       </button>
 
       <div className="text-center mt-4">
-        <p className="text-sm text-gray-600 dark:text-gray-400">
+        <p className="text-sm text-gray-700 dark:text-gray-300">
           Don't have an account?{' '}
           <Link to="/signup" className="font-medium text-primary-600 hover:text-primary-500 dark:text-primary-400 dark:hover:text-primary-300">
             Sign up
