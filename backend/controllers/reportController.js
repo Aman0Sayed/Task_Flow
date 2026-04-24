@@ -82,7 +82,7 @@ exports.getDashboardStats = asyncHandler(async (req, res, next) => {
 exports.getProjectReport = asyncHandler(async (req, res, next) => {
   const project = await Project.findById(req.params.projectId)
     .populate('owner', 'name email')
-    .populate('members.user', 'name email');
+    .populate('members.user', '_id name email');
 
   if (!project) {
     return next(new ErrorResponse('Project not found', 404));
@@ -236,7 +236,7 @@ exports.getTeamReport = asyncHandler(async (req, res, next) => {
   const Team = require('../models/Team');
   
   const team = await Team.findById(req.params.teamId)
-    .populate('members.user', 'name email')
+    .populate('members.user', '_id name email')
     .populate('projects', 'name status');
 
   if (!team) {

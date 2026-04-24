@@ -69,11 +69,27 @@ app.options('*', cors());
 
 app.use('/uploads', express.static(path.join(__dirname, 'Uploads')));
 
-const limiter = rateLimit({
+// Rate limiting
+// The frontend does polling (notifications) and periodic data refresh (tasks/projects/teams/users/activities),
+// so a very low global limit causes 429s during normal usage/testing.
+const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 150
+  max: process.env.NODE_ENV === 'production' ? 1200 : 10000,
+  standardHeaders: true,
+  legacyHeaders: false,
+  // Auth endpoints get their own limiter below.
+  skip: (req) => req.path && req.path.startsWith('/auth')
 });
-app.use('/api/', limiter);
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: process.env.NODE_ENV === 'production' ? 80 : 500,
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+app.use('/api/auth', authLimiter);
+app.use('/api/', apiLimiter);
 
 app.use((req, res, next) => {
   console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);

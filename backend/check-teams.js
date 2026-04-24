@@ -12,7 +12,7 @@ async function checkTeams() {
 
     const teams = await Team.find({})
       .populate('owner', 'name email')
-      .populate('members.user', 'name email');
+      .populate('members.user', '_id name email');
 
     console.log('Teams in DB:', teams.length);
     teams.forEach(team => {

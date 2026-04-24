@@ -1,23 +1,22 @@
-import { useState } from 'react';
-import { Check, X, Copy, Mail, Calendar, Badge, Shield, MapPin } from 'lucide-react';
+import { useMemo, useState } from 'react';
+import { Check, X, Copy, Mail, Calendar, Badge, Shield } from 'lucide-react';
 import { useAppSelector } from '../hooks/hook';
+import { useData } from '../context/DataContext';
 
 export default function Profile() {
   const user = useAppSelector((state) => state.auth.user);
-  const [copied, setCopied] = useState(false);
+  const { projects, teams, tasks } = useData();
+  const [copiedType, setCopiedType] = useState<'id' | 'profile' | null>(null);
   const [isEditing, setIsEditing] = useState(false);
 
-  // Get user initials for avatar
-  const getInitials = (name: string) => {
-    return name
+  const getInitials = (name: string) =>
+    name
       .split(' ')
-      .map(n => n[0])
+      .map((part) => part[0])
       .join('')
       .toUpperCase()
       .slice(0, 2);
-  };
 
-  // Get avatar color based on name
   const getAvatarColor = (name: string) => {
     const colors = [
       'bg-gradient-to-br from-blue-400 to-blue-600',
@@ -26,20 +25,9 @@ export default function Profile() {
       'bg-gradient-to-br from-green-400 to-green-600',
       'bg-gradient-to-br from-orange-400 to-orange-600',
     ];
-    const index = name.length % colors.length;
-    return colors[index];
+    return colors[name.length % colors.length];
   };
 
-  // Copy TaskFlow ID to clipboard
-  const copyTaskflowId = async () => {
-    if (user?.taskflowId) {
-      await navigator.clipboard.writeText(`@${user.taskflowId}`);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
-  };
-
-  // Get role badge color
   const getRoleBadgeColor = (role: string) => {
     switch (role) {
       case 'manager':
@@ -53,70 +41,89 @@ export default function Profile() {
     }
   };
 
+  const memberSince = useMemo(() => {
+    const createdAt = (user as any)?.createdAt;
+    if (!createdAt) return null;
+
+    const date = new Date(createdAt);
+    if (Number.isNaN(date.getTime())) return null;
+    return date;
+  }, [user]);
+
+  const memberDays = useMemo(() => {
+    if (!memberSince) return 0;
+    const diff = Date.now() - memberSince.getTime();
+    return Math.max(1, Math.floor(diff / (1000 * 60 * 60 * 24)));
+  }, [memberSince]);
+
+  const copyTaskflowId = async () => {
+    if (!user?.taskflowId) return;
+    await navigator.clipboard.writeText(`@${user.taskflowId}`);
+    setCopiedType('id');
+    setTimeout(() => setCopiedType(null), 2000);
+  };
+
+  const copyProfileLink = async () => {
+    if (!user?.taskflowId) return;
+    await navigator.clipboard.writeText(`${window.location.origin}/profile/${user.taskflowId}`);
+    setCopiedType('profile');
+    setTimeout(() => setCopiedType(null), 2000);
+  };
+
   return (
     <div className="animate-fade-in space-y-8">
-      {/* Profile Header */}
       <div className="relative">
-        {/* Background banner */}
-        <div className="h-32 bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 rounded-lg shadow-md"></div>
+        <div className="h-32 rounded-lg bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 shadow-md" />
 
-        {/* Profile info card */}
         <div className="mx-auto px-6 pb-6">
           <div className="card relative -mt-16 shadow-xl">
             <div className="p-6">
               <div className="flex flex-col sm:flex-row sm:items-end sm:gap-6">
-                {/* Avatar */}
-                <div className={`flex-shrink-0 h-32 w-32 rounded-lg ${getAvatarColor(user?.name || '')} flex items-center justify-center text-5xl font-bold text-white shadow-lg border-4 border-white dark:border-gray-900`}>
+                <div className={`flex h-32 w-32 flex-shrink-0 items-center justify-center rounded-lg border-4 border-white text-5xl font-bold text-white shadow-lg dark:border-gray-900 ${getAvatarColor(user?.name || '')}`}>
                   {getInitials(user?.name || '')}
                 </div>
 
-                {/* Header info */}
                 <div className="flex-1 pt-4 sm:pt-0">
-                  <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">
-                    {user?.name}
-                  </h1>
+                  <h1 className="mb-2 text-3xl font-bold text-gray-900 dark:text-white">{user?.name}</h1>
 
-                  {/* TaskFlow ID Section - Prominent */}
-                  <div className="mb-4 p-3 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-gray-800 dark:to-gray-900 rounded-lg border border-blue-200 dark:border-gray-700">
-                    <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mb-1">
+                  <div className="mb-4 rounded-lg border border-blue-200 bg-gradient-to-r from-blue-50 to-purple-50 p-3 dark:border-gray-700 dark:from-gray-800 dark:to-gray-900">
+                    <p className="mb-1 text-xs font-semibold uppercase tracking-wider text-gray-600 dark:text-gray-400">
                       Your TaskFlow ID
                     </p>
-                    <div className="flex items-center gap-2 flex-wrap">
+                    <div className="flex flex-wrap items-center gap-2">
                       <code className="text-lg font-mono font-bold text-blue-600 dark:text-blue-400">
                         @{user?.taskflowId}
                       </code>
                       <button
                         onClick={copyTaskflowId}
-                        className="inline-flex items-center gap-1 px-3 py-1 text-xs bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded hover:bg-gray-50 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 transition"
+                        className="inline-flex items-center gap-1 rounded border border-gray-300 bg-white px-3 py-1 text-xs text-gray-700 transition hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700"
                       >
-                        <Copy className="w-3 h-3" />
-                        {copied ? 'Copied!' : 'Copy'}
+                        <Copy className="h-3 w-3" />
+                        {copiedType === 'id' ? 'Copied!' : 'Copy'}
                       </button>
                     </div>
-                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                      💡 Share your TaskFlow ID to collaborate with others
+                    <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                      Share your TaskFlow ID to collaborate with others.
                     </p>
                   </div>
 
-                  {/* Status badges */}
                   <div className="flex flex-wrap gap-2">
-                    <span className={`inline-flex items-center gap-1 px-3 py-1 rounded-lg text-sm font-semibold ${getRoleBadgeColor(user?.role || '')}`}>
-                      <Shield className="w-4 h-4" />
+                    <span className={`inline-flex items-center gap-1 rounded-lg px-3 py-1 text-sm font-semibold ${getRoleBadgeColor(user?.role || '')}`}>
+                      <Shield className="h-4 w-4" />
                       {user?.role?.charAt(0).toUpperCase() + user?.role?.slice(1)}
                     </span>
-                    <span className="inline-flex items-center gap-1 px-3 py-1 rounded-lg bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200 text-sm font-semibold">
-                      ✓ Active
+                    <span className="inline-flex items-center gap-1 rounded-lg bg-green-100 px-3 py-1 text-sm font-semibold text-green-800 dark:bg-green-900 dark:text-green-200">
+                      Active
                     </span>
                   </div>
                 </div>
 
-                {/* Action buttons */}
                 <div className="flex gap-2 pt-4 sm:pt-0">
                   <button
-                    onClick={() => setIsEditing(!isEditing)}
-                    className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium transition text-sm"
+                    onClick={() => setIsEditing(true)}
+                    className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-blue-700"
                   >
-                    {isEditing ? 'Cancel' : 'Edit Profile'}
+                    Edit Profile
                   </button>
                 </div>
               </div>
@@ -125,187 +132,161 @@ export default function Profile() {
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 px-6">
-        {/* Left Column - Main Info */}
-        <div className="lg:col-span-2 space-y-6">
-          {/* Quick Stats */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 gap-6 px-6 lg:grid-cols-3">
+        <div className="space-y-6 lg:col-span-2">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
             <div className="card p-4 text-center">
-              <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">0</div>
-              <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">Projects</div>
+              <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">{projects.length}</div>
+              <div className="mt-1 text-xs text-gray-600 dark:text-gray-400">Projects</div>
             </div>
             <div className="card p-4 text-center">
-              <div className="text-2xl font-bold text-green-600 dark:text-green-400">0</div>
-              <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">Teams</div>
+              <div className="text-2xl font-bold text-green-600 dark:text-green-400">{teams.length}</div>
+              <div className="mt-1 text-xs text-gray-600 dark:text-gray-400">Teams</div>
             </div>
             <div className="card p-4 text-center">
-              <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">0</div>
-              <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">Tasks</div>
+              <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">{tasks.length}</div>
+              <div className="mt-1 text-xs text-gray-600 dark:text-gray-400">Tasks</div>
             </div>
             <div className="card p-4 text-center">
-              <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">0</div>
-              <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">Days</div>
+              <div className="text-2xl font-bold text-orange-600 dark:text-orange-400">{memberDays}</div>
+              <div className="mt-1 text-xs text-gray-600 dark:text-gray-400">Days</div>
             </div>
           </div>
 
-          {/* Profile Details */}
           <div className="card">
             <div className="border-b border-gray-200 px-6 py-4 dark:border-gray-700">
-              <h3 className="font-bold text-lg text-gray-900 dark:text-white flex items-center gap-2">
-                <Badge className="w-5 h-5" />
+              <h3 className="flex items-center gap-2 text-lg font-bold text-gray-900 dark:text-white">
+                <Badge className="h-5 w-5" />
                 Contact Information
               </h3>
             </div>
-            <div className="p-6 space-y-4">
-              {/* Email */}
+            <div className="space-y-4 p-6">
               <div className="flex items-start gap-4">
                 <div className="flex-shrink-0 pt-1">
-                  <Mail className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                  <Mail className="h-5 w-5 text-blue-600 dark:text-blue-400" />
                 </div>
                 <div className="flex-1">
                   <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Email</p>
-                  <p className="text-base text-gray-900 dark:text-white font-mono">{user?.email}</p>
+                  <p className="font-mono text-base text-gray-900 dark:text-white">{user?.email}</p>
                 </div>
               </div>
 
-              {/* Tenant ID */}
-              <div className="flex items-start gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+              <div className="flex items-start gap-4 border-t border-gray-200 pt-4 dark:border-gray-700">
                 <div className="flex-shrink-0 pt-1">
-                  <Shield className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                  <Shield className="h-5 w-5 text-purple-600 dark:text-purple-400" />
                 </div>
                 <div className="flex-1">
                   <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Workspace ID</p>
-                  <p className="text-sm text-gray-900 dark:text-white font-mono break-all">{user?.tenantId?.substring(0, 16)}...</p>
+                  <p className="break-all font-mono text-sm text-gray-900 dark:text-white">
+                    {user?.tenantId ? `${user.tenantId.substring(0, 16)}...` : 'Not available'}
+                  </p>
                 </div>
               </div>
 
-              {/* Join Date */}
-              <div className="flex items-start gap-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+              <div className="flex items-start gap-4 border-t border-gray-200 pt-4 dark:border-gray-700">
                 <div className="flex-shrink-0 pt-1">
-                  <Calendar className="w-5 h-5 text-green-600 dark:text-green-400" />
+                  <Calendar className="h-5 w-5 text-green-600 dark:text-green-400" />
                 </div>
                 <div className="flex-1">
                   <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Member Since</p>
-                  <p className="text-base text-gray-900 dark:text-white">February 23, 2026</p>
+                  <p className="text-base text-gray-900 dark:text-white">
+                    {memberSince ? memberSince.toLocaleDateString() : 'Not available'}
+                  </p>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Bio Section */}
           <div className="card">
             <div className="border-b border-gray-200 px-6 py-4 dark:border-gray-700">
-              <h3 className="font-bold text-lg text-gray-900 dark:text-white">About</h3>
+              <h3 className="text-lg font-bold text-gray-900 dark:text-white">About</h3>
             </div>
             <div className="p-6">
-              {isEditing ? (
-                <textarea
-                  rows={4}
-                  defaultValue="Add a bio to tell others about yourself..."
-                  className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 dark:border-gray-600 dark:bg-gray-800 dark:text-white focus:border-blue-500 focus:ring-2 focus:ring-blue-200 dark:focus:ring-blue-900 transition"
-                />
-              ) : (
-                <p className="text-gray-600 dark:text-gray-400 leading-relaxed">
-                  👋 Hi! I'm using TaskFlow to manage my projects and collaborate with my team. Feel free to connect with me using my TaskFlow ID: <span className="font-mono font-bold text-blue-600 dark:text-blue-400">@{user?.taskflowId}</span>
-                </p>
-              )}
+              <p className="leading-relaxed text-gray-600 dark:text-gray-400">
+                Hi! I am using TaskFlow to manage projects and collaborate with my team. Feel free to connect with me using my TaskFlow ID:{' '}
+                <span className="font-mono font-bold text-blue-600 dark:text-blue-400">@{user?.taskflowId}</span>
+              </p>
             </div>
           </div>
         </div>
 
-        {/* Right Column - Additional Info */}
         <div className="space-y-6">
-          {/* Quick Links */}
           <div className="card">
             <div className="border-b border-gray-200 px-6 py-4 dark:border-gray-700">
               <h3 className="font-bold text-gray-900 dark:text-white">Share Profile</h3>
             </div>
-            <div className="p-6 space-y-3">
-              <button className="w-full px-4 py-2 rounded-lg bg-blue-50 hover:bg-blue-100 dark:bg-blue-900 dark:hover:bg-blue-800 text-blue-700 dark:text-blue-300 font-medium text-sm transition">
-                Copy Profile Link
+            <div className="space-y-3 p-6">
+              <button
+                onClick={copyProfileLink}
+                className="w-full rounded-lg bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-100 dark:bg-blue-900 dark:text-blue-300 dark:hover:bg-blue-800"
+              >
+                {copiedType === 'profile' ? 'Copied!' : 'Copy Profile Link'}
               </button>
-              <button className="w-full px-4 py-2 rounded-lg bg-purple-50 hover:bg-purple-100 dark:bg-purple-900 dark:hover:bg-purple-800 text-purple-700 dark:text-purple-300 font-medium text-sm transition">
-                Share TaskFlow ID
+              <button
+                onClick={copyTaskflowId}
+                className="w-full rounded-lg bg-purple-50 px-4 py-2 text-sm font-medium text-purple-700 transition hover:bg-purple-100 dark:bg-purple-900 dark:text-purple-300 dark:hover:bg-purple-800"
+              >
+                {copiedType === 'id' ? 'Copied!' : 'Share TaskFlow ID'}
               </button>
-              <button className="w-full px-4 py-2 rounded-lg bg-green-50 hover:bg-green-100 dark:bg-green-900 dark:hover:bg-green-800 text-green-700 dark:text-green-300 font-medium text-sm transition">
+              <button className="w-full rounded-lg bg-green-50 px-4 py-2 text-sm font-medium text-green-700 transition hover:bg-green-100 dark:bg-green-900 dark:text-green-300 dark:hover:bg-green-800">
                 Generate QR Code
               </button>
             </div>
           </div>
 
-          {/* Privacy Section */}
           <div className="card">
             <div className="border-b border-gray-200 px-6 py-4 dark:border-gray-700">
               <h3 className="font-bold text-gray-900 dark:text-white">Privacy</h3>
             </div>
-            <div className="p-6 space-y-3">
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" defaultChecked className="w-4 h-4 rounded" />
+            <div className="space-y-3 p-6">
+              <label className="flex cursor-pointer items-center gap-3">
+                <input type="checkbox" defaultChecked className="h-4 w-4 rounded" />
                 <span className="text-sm text-gray-700 dark:text-gray-300">Show profile publicly</span>
               </label>
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" defaultChecked className="w-4 h-4 rounded" />
+              <label className="flex cursor-pointer items-center gap-3">
+                <input type="checkbox" defaultChecked className="h-4 w-4 rounded" />
                 <span className="text-sm text-gray-700 dark:text-gray-300">Allow collaboration invites</span>
               </label>
-              <label className="flex items-center gap-3 cursor-pointer">
-                <input type="checkbox" defaultChecked className="w-4 h-4 rounded" />
+              <label className="flex cursor-pointer items-center gap-3">
+                <input type="checkbox" defaultChecked className="h-4 w-4 rounded" />
                 <span className="text-sm text-gray-700 dark:text-gray-300">Show activity status</span>
               </label>
-            </div>
-          </div>
-
-          {/* Account Actions */}
-          <div className="card">
-            <div className="border-b border-gray-200 px-6 py-4 dark:border-gray-700">
-              <h3 className="font-bold text-gray-900 dark:text-white">Account</h3>
-            </div>
-            <div className="p-6 space-y-3">
-              <button className="w-full px-4 py-2 rounded-lg border border-gray-300 hover:bg-gray-50 dark:border-gray-600 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-medium text-sm transition">
-                Change Password
-              </button>
-              <button className="w-full px-4 py-2 rounded-lg border border-red-300 hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-900 text-red-700 dark:text-red-300 font-medium text-sm transition">
-                Delete Account
-              </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Edit mode form (at bottom) */}
       {isEditing && (
-        <div className="px-6 pb-6">
-          <div className="card">
-            <div className="border-b border-gray-200 px-6 py-4 dark:border-gray-700">
-              <h3 className="font-bold text-lg text-gray-900 dark:text-white">Edit Profile</h3>
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setIsEditing(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-xl bg-white shadow-2xl dark:bg-gray-900"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="border-b border-gray-200 px-5 py-3 dark:border-gray-700">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white">Edit Profile</h3>
             </div>
-            <div className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="p-5">
+              <div className="grid grid-cols-1 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Full Name</label>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Full Name</label>
                   <input type="text" defaultValue={user?.name} className="w-full rounded-lg border border-gray-300 px-4 py-2 dark:border-gray-600 dark:bg-gray-800 dark:text-white" />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Email</label>
+                  <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Email</label>
                   <input type="email" defaultValue={user?.email} className="w-full rounded-lg border border-gray-300 px-4 py-2 dark:border-gray-600 dark:bg-gray-800 dark:text-white" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Location</label>
-                  <input type="text" placeholder="Add your location" className="w-full rounded-lg border border-gray-300 px-4 py-2 dark:border-gray-600 dark:bg-gray-800 dark:text-white" />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Title</label>
-                  <input type="text" placeholder="Your job title" className="w-full rounded-lg border border-gray-300 px-4 py-2 dark:border-gray-600 dark:bg-gray-800 dark:text-white" />
                 </div>
               </div>
 
-              <div className="flex justify-end gap-3 mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
-                <button onClick={() => setIsEditing(false)} className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-medium transition">
-                  <X className="w-4 h-4 inline mr-2" />
+              <div className="mt-4 flex justify-end gap-3 border-t border-gray-200 pt-4 dark:border-gray-700">
+                <button onClick={() => setIsEditing(false)} className="rounded-lg border border-gray-300 px-4 py-2 font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800">
+                  <X className="mr-2 inline h-4 w-4" />
                   Cancel
                 </button>
-                <button onClick={() => setIsEditing(false)} className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium transition">
-                  <Check className="w-4 h-4 inline mr-2" />
+                <button onClick={() => setIsEditing(false)} className="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white transition hover:bg-blue-700">
+                  <Check className="mr-2 inline h-4 w-4" />
                   Save Changes
                 </button>
               </div>

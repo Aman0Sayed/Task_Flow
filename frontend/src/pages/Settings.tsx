@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useData } from '../context/DataContext';
 import { useNavigate } from 'react-router-dom';
 import { Building2, UserX } from 'lucide-react';
 import { logout as logoutRedux, initializeAuth } from '../features/auth/authSlice';
@@ -66,6 +67,7 @@ export default function Settings() {
   });
 
   const canManageTeam = isManager(user ?? undefined);
+  const { refetchData } = useData();
 
   const currentTeam = useMemo(() => {
     if (!teams.length) return null;
@@ -236,6 +238,7 @@ export default function Settings() {
 
       setMessage('Team deleted successfully.');
       await fetchTeams();
+      try { refetchData(); } catch (e) { /* ignore if provider not present */ }
       dispatch(initializeAuth());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete team');
@@ -281,6 +284,7 @@ export default function Settings() {
 
       setMessage(`${memberName} removed from team.`);
       await fetchTeams();
+      try { refetchData(); } catch (e) { /* ignore if provider not present */ }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to remove member');
     } finally {
@@ -363,6 +367,7 @@ export default function Settings() {
 
       setMessage('Company deleted successfully.');
       await fetchTeams();
+      try { refetchData(); } catch (e) { /* ignore if provider not present */ }
       dispatch(initializeAuth());
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete company');

@@ -36,6 +36,7 @@ interface TaskData {
     name?: string;
   };
   assignee?: TaskUser | null;
+  assignees?: TaskUser[];
   assignedBy?: TaskUser | null;
   comments?: TaskComment[];
   attachments?: Array<{ _id?: string; filename?: string }>;
@@ -77,8 +78,79 @@ export default function TaskDetails() {
   const [savingEdit, setSavingEdit] = useState(false);
   const [deletingTaskAction, setDeletingTaskAction] = useState(false);
 
+  const [showAssigneeModal, setShowAssigneeModal] = useState(false);
+  const [selectedAssigneeId, setSelectedAssigneeId] = useState('');
+  const [assigning, setAssigning] = useState(false);
+  const [assignError, setAssignError] = useState<string | null>(null);
+
   const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
-  const { refetchData } = useData();
+  const { projects, teams, users, refetchData } = useData();
+
+  const getId = (value: any) => {
+    if (!value) return null;
+    return (value._id || value.id || value) as string;
+  };
+
+  const canAssign = (currentUser?.role || '').toLowerCase() === 'manager';
+  const canManageTask = (currentUser as any)?.role === 'manager' || (currentUser as any)?.role === 'admin';
+
+  const assignedUserIds = useMemo(() => {
+    const ids = new Set<string>();
+    const primaryId = getId(task?.assignee);
+    if (primaryId) ids.add(primaryId.toString());
+    if (Array.isArray(task?.assignees)) {
+      for (const a of task.assignees) {
+        const id = getId(a);
+        if (id) ids.add(id.toString());
+      }
+    }
+    return ids;
+  }, [task]);
+
+  const assignableMembers = useMemo(() => {
+    const projectId = getId(task?.project);
+    if (!projectId) return [];
+
+    const project = projects.find((p: any) => {
+      const id = getId(p);
+      return id && id.toString() === projectId.toString();
+    });
+
+    const rawUsers: any[] = [];
+    const teamId = getId(project?.team);
+    if (teamId) {
+      const team = teams.find((t: any) => {
+        const id = getId(t);
+        return id && id.toString() === teamId.toString();
+      });
+      if (team?.owner) rawUsers.push(team.owner);
+      if (Array.isArray(team?.members)) {
+        for (const member of team.members) rawUsers.push(member?.user ?? member);
+      }
+    } else {
+      if (project?.owner) rawUsers.push(project.owner);
+      if (Array.isArray(project?.members)) {
+        for (const member of project.members) rawUsers.push(member?.user ?? member);
+      }
+    }
+
+    const normalized = rawUsers
+      .map((u) => {
+        if (!u) return null;
+        const id = getId(u);
+        if (!id) return null;
+        const found = users.find((uu: any) => getId(uu) && getId(uu).toString() === id.toString());
+        const name = u?.name || found?.name || u?.email || found?.email;
+        if (!name) return null;
+        return { id: id.toString(), name, email: u?.email || found?.email, avatar: u?.avatar || found?.avatar };
+      })
+      .filter(Boolean) as Array<{ id: string; name: string; email?: string; avatar?: string }>;
+
+    const unique = new Map<string, { id: string; name: string; email?: string; avatar?: string }>();
+    for (const member of normalized) unique.set(member.id.toString(), member);
+
+    return Array.from(unique.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [projects, teams, users, task]);
 
   const fetchTask = useCallback(async () => {
     if (!id) return;
@@ -124,6 +196,13 @@ export default function TaskDetails() {
     event?.preventDefault();
 
     if (!id || !commentText.trim() || submittingComment) {
+      return;
+    }
+
+    const currentUserId = getId(currentUser as any);
+    const isManager = (currentUser as any)?.role === 'manager' || (currentUser as any)?.role === 'admin';
+    if (!isManager && (!currentUserId || !assignedUserIds.has(currentUserId.toString()))) {
+      setError('Only assigned users or managers can comment on this task.');
       return;
     }
 
@@ -228,6 +307,52 @@ export default function TaskDetails() {
     }
   };
 
+  const handleAddAssignee = async () => {
+    if (!id) return;
+    if (!selectedAssigneeId) {
+      setAssignError('Select a team member.');
+      return;
+    }
+
+    try {
+      setAssigning(true);
+      setAssignError(null);
+      const token = localStorage.getItem('token');
+
+      const body = {
+        assignees: Array.from(new Set([...Array.from(assignedUserIds), selectedAssigneeId]))
+      };
+
+      const res = await fetch(`${BASE_URL}/api/tasks/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(body),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || data?.message || 'Failed to add assignee');
+      }
+
+      if (data?.data) {
+        setTask(data.data);
+      } else {
+        await fetchTask();
+      }
+
+      setShowAssigneeModal(false);
+      setSelectedAssigneeId('');
+      setTimeout(() => refetchData(), 300);
+    } catch (err) {
+      setAssignError(err instanceof Error ? err.message : 'Failed to add assignee');
+    } finally {
+      setAssigning(false);
+    }
+  };
+
   if (loading) {
     return (
       <>
@@ -270,6 +395,13 @@ export default function TaskDetails() {
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back to Tasks
           </Link>
+          <div className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-mono text-gray-700 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-200">
+            <div>
+              <Link to="/projects" className="hover:text-primary-600 dark:hover:text-primary-400">Projects</Link>
+            </div>
+            <div className="pl-4">|- {task.project?.name || 'Unknown Project'}</div>
+            <div className="pl-8">|- {task.title}</div>
+          </div>
           <h1 className="text-2xl font-bold">{task.title}</h1>
         </div>
         <div className="flex items-center gap-2">
@@ -282,43 +414,45 @@ export default function TaskDetails() {
             </Badge>
           </div>
 
-          <div className="relative">
-            <button
-              onClick={() => setShowSettingsMenu((s) => !s)}
-              aria-label="Task settings"
-              className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
-            >
-              <MoreVertical className="h-5 w-5" />
-            </button>
+          {canManageTask && (
+            <div className="relative">
+              <button
+                onClick={() => setShowSettingsMenu((s) => !s)}
+                aria-label="Task settings"
+                className="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-800"
+              >
+                <MoreVertical className="h-5 w-5" />
+              </button>
 
-            {showSettingsMenu && (
-              <div className="absolute right-0 mt-2 w-44 rounded-md border bg-white py-1 shadow-md dark:bg-gray-800 dark:border-gray-700">
-                <button
-                  onClick={() => {
-                    setShowSettingsMenu(false);
-                    // initialize edit fields
-                    setEditTitle(task.title || '');
-                    setEditDescription(task.description || '');
-                    setEditStatus(task.status || 'todo');
-                    setEditPriority(task.priority || 'medium');
-                    setShowEditModal(true);
-                  }}
-                  className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
-                >
-                  <span className="inline-flex items-center gap-2"><Edit className="h-4 w-4" /> Edit Task</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setShowSettingsMenu(false);
-                    setShowDeleteConfirm(true);
-                  }}
-                  className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30"
-                >
-                  <span className="inline-flex items-center gap-2"><Trash2 className="h-4 w-4" /> Delete Task</span>
-                </button>
-              </div>
-            )}
-          </div>
+              {showSettingsMenu && (
+                <div className="absolute right-0 mt-2 w-44 rounded-md border bg-white py-1 shadow-md dark:bg-gray-800 dark:border-gray-700">
+                  <button
+                    onClick={() => {
+                      setShowSettingsMenu(false);
+                      // initialize edit fields
+                      setEditTitle(task.title || '');
+                      setEditDescription(task.description || '');
+                      setEditStatus(task.status || 'todo');
+                      setEditPriority(task.priority || 'medium');
+                      setShowEditModal(true);
+                    }}
+                    className="w-full px-3 py-2 text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700"
+                  >
+                    <span className="inline-flex items-center gap-2"><Edit className="h-4 w-4" /> Edit Task</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowSettingsMenu(false);
+                      setShowDeleteConfirm(true);
+                    }}
+                    className="w-full px-3 py-2 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/30"
+                  >
+                    <span className="inline-flex items-center gap-2"><Trash2 className="h-4 w-4" /> Delete Task</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
 
@@ -346,26 +480,54 @@ export default function TaskDetails() {
               </span>
             </div>
 
-            <form onSubmit={handleSubmitComment} className="mb-5 space-y-3">
-              <textarea
-                value={commentText}
-                onChange={(event) => setCommentText(event.target.value)}
-                rows={3}
-                placeholder="Write an update, blocker, or question..."
-                className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-900"
-              />
-              <div className="flex justify-end">
-                <button
-                  type="button"
-                  onClick={handleSubmitComment}
-                  disabled={!commentText.trim() || submittingComment}
-                  className="btn btn-primary"
-                >
-                  <Send className="mr-2 h-4 w-4" />
-                  {submittingComment ? 'Posting...' : 'Post Comment'}
-                </button>
-              </div>
-            </form>
+            {(() => {
+              const currentUserId = getId(currentUser as any);
+              const isManager = (currentUser as any)?.role === 'manager' || (currentUser as any)?.role === 'admin';
+              const canComment = Boolean(isManager || (currentUserId && assignedUserIds.has(currentUserId.toString())));
+              const hasAssignees = assignedUserIds.size > 0;
+
+              // If the task has assignees and the current user is NOT one of them,
+              // show only the warning box and hide the discussion input + comments list.
+              if (!canComment && hasAssignees) {
+                return (
+                  <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-200">
+                    Only assigned users or managers can comment on this task.
+                  </div>
+                );
+              }
+
+              return (
+                <>
+                  {!canComment && (
+                    <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-200">
+                      This task is unassigned. Assign it to enable comments.
+                    </div>
+                  )}
+
+                  <form onSubmit={handleSubmitComment} className="mb-5 space-y-3">
+                    <textarea
+                      value={commentText}
+                      onChange={(event) => setCommentText(event.target.value)}
+                      rows={3}
+                      placeholder={canComment ? 'Write an update, blocker, or question...' : 'Commenting is restricted to assigned users or managers.'}
+                      disabled={!canComment}
+                      className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 disabled:cursor-not-allowed disabled:bg-gray-100 dark:border-gray-600 dark:bg-gray-900 dark:disabled:bg-gray-800"
+                    />
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={handleSubmitComment}
+                        disabled={!canComment || !commentText.trim() || submittingComment}
+                        className="btn btn-primary"
+                      >
+                        <Send className="mr-2 h-4 w-4" />
+                        {submittingComment ? 'Posting...' : 'Post Comment'}
+                      </button>
+                    </div>
+                  </form>
+                </>
+              );
+            })()}
 
             <div className="space-y-4">
               {sortedComments.length === 0 ? (
@@ -419,7 +581,48 @@ export default function TaskDetails() {
               </div>
               <div className="flex items-start gap-2 text-gray-700 dark:text-gray-300">
                 <User2 className="mt-0.5 h-4 w-4 text-gray-500 dark:text-gray-400" />
-                <span><strong>Assignee:</strong> {task.assignee?.name || 'Unassigned'}</span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <span><strong>Assignees:</strong></span>
+                    {canAssign && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setAssignError(null);
+                          try {
+                            await refetchData();
+                          } catch (e) {
+                            // ignore
+                          }
+                          // Open modal without pre-selecting — ensure list refreshed
+                          setSelectedAssigneeId('');
+                          setShowAssigneeModal(true);
+                        }}
+                        className="inline-flex h-6 w-6 items-center justify-center rounded border border-gray-300 bg-white text-sm font-semibold text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+                        title="Add another assignee"
+                      >
+                        +
+                      </button>
+                    )}
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    {Array.isArray(task.assignees) && task.assignees.length > 0 ? (
+                      task.assignees.map((u) => (
+                        <div key={getId(u) || u.email || u.name} className="flex items-center gap-2 rounded-full bg-gray-100 px-2 py-1 text-xs text-gray-700 dark:bg-gray-800 dark:text-gray-200">
+                          <Avatar name={u?.name || 'User'} src={u?.avatar} size="xs" />
+                          <span className="max-w-[10rem] truncate">{u?.name || u?.email || 'User'}</span>
+                        </div>
+                      ))
+                    ) : task.assignee ? (
+                      <div className="flex items-center gap-2 rounded-full bg-gray-100 px-2 py-1 text-xs text-gray-700 dark:bg-gray-800 dark:text-gray-200">
+                        <Avatar name={task.assignee?.name || 'User'} src={task.assignee?.avatar} size="xs" />
+                        <span className="max-w-[10rem] truncate">{task.assignee?.name || task.assignee?.email || 'User'}</span>
+                      </div>
+                    ) : (
+                      <span className="text-sm text-gray-500 dark:text-gray-400">Unassigned</span>
+                    )}
+                  </div>
+                </div>
               </div>
               <div className="flex items-start gap-2 text-gray-700 dark:text-gray-300">
                 <User2 className="mt-0.5 h-4 w-4 text-gray-500 dark:text-gray-400" />
@@ -449,8 +652,76 @@ export default function TaskDetails() {
       )}
       </div>
 
+      {showAssigneeModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => !assigning && setShowAssigneeModal(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="border-b border-gray-200 px-5 py-3 dark:border-gray-700">
+              <h3 className="text-base font-semibold text-gray-900 dark:text-white">Add Assignee</h3>
+              <p className="mt-1 line-clamp-1 text-xs text-gray-500 dark:text-gray-400">{task.title}</p>
+            </div>
+            <div className="space-y-4 p-5">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Team member</label>
+                <select
+                  value={selectedAssigneeId}
+                  onChange={(event) => setSelectedAssigneeId(event.target.value)}
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200"
+                >
+                  <option value="" disabled>
+                    Select a member...
+                  </option>
+                  {assignableMembers
+                    .filter((member: any) => !assignedUserIds.has(member.id?.toString?.() ?? String(member.id)))
+                    .map((member: any) => (
+                      <option key={member.id} value={member.id}>
+                        {member.name}{member.email ? ` (${member.email})` : ''}
+                      </option>
+                    ))}
+                </select>
+                {assignableMembers.filter((member: any) => !assignedUserIds.has(member.id?.toString?.() ?? String(member.id))).length === 0 && (
+                  <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                    Everyone is already assigned to this task.
+                  </p>
+                )}
+              </div>
+
+              {assignError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">
+                  {assignError}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 border-t border-gray-200 pt-4 dark:border-gray-700">
+                <button
+                  type="button"
+                  onClick={() => setShowAssigneeModal(false)}
+                  disabled={assigning}
+                  className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAddAssignee}
+                  disabled={assigning || !selectedAssigneeId || assignableMembers.filter((member: any) => !assignedUserIds.has(member.id?.toString?.() ?? String(member.id))).length === 0}
+                  className="rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {assigning ? 'Adding...' : 'Add'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Edit Task Modal */}
-      {showEditModal && (
+      {canManageTask && showEditModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-2xl rounded-xl border border-gray-200 bg-white p-6 shadow-2xl dark:border-gray-700 dark:bg-gray-800">
             <h3 className="text-lg font-semibold">Edit Task</h3>
@@ -509,7 +780,7 @@ export default function TaskDetails() {
       )}
 
       {/* Delete Confirm Modal */}
-      {showDeleteConfirm && (
+      {canManageTask && showDeleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-md rounded-xl border border-gray-200 bg-white p-5 shadow-2xl dark:border-gray-700 dark:bg-gray-800">
             <h3 className="text-lg font-semibold">Delete Task?</h3>
@@ -524,4 +795,3 @@ export default function TaskDetails() {
     </>
   );
 }
-

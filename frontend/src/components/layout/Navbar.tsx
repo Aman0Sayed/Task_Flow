@@ -1,13 +1,14 @@
-import { ReactNode, useState, useEffect } from 'react';
+import { ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useDispatch } from 'react-redux';
-import { logout as logoutRedux } from '../../features/auth/authSlice';
+import { initializeAuth, logout as logoutRedux } from '../../features/auth/authSlice';
 import { Bell, Search, UserCircle, Settings, HelpCircle, LogOut, Check, X, Book } from 'lucide-react';
 import ThemeToggle from '../ui/ThemeToggle';
 import Avatar from '../ui/Avatar';
 import { cn } from '../../lib/utils';
 import { useAppSelector } from '../../hooks/hook';
 import { useAuth } from '../../context/AuthContext';
+import { useData } from '../../context/DataContext';
 
 interface NavbarProps {
   children?: ReactNode;
@@ -26,8 +27,32 @@ export default function Navbar({ children }: NavbarProps) {
   const user = useAppSelector((state) => state.auth.user);
   const token = useAppSelector((state) => state.auth.token);
   const { logout } = useAuth();
+  const { refetchData, teams } = useData();
   const navigate = useNavigate();
   const dispatch = useDispatch();
+
+  const handledKickIds = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem('handledKickNotificationIds');
+      if (!raw) return;
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        handledKickIds.current = new Set(parsed.map(String));
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const persistHandledKickIds = () => {
+    try {
+      localStorage.setItem('handledKickNotificationIds', JSON.stringify(Array.from(handledKickIds.current)));
+    } catch {
+      // ignore
+    }
+  };
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -158,6 +183,37 @@ export default function Navbar({ children }: NavbarProps) {
     }
   };
 
+  const handleKicked = async (notification: any) => {
+    if (!notification?._id) return;
+
+    // Avoid re-triggering every 10s polling cycle.
+    if (handledKickIds.current.has(String(notification._id))) {
+      return;
+    }
+
+    handledKickIds.current.add(String(notification._id));
+    persistHandledKickIds();
+
+    try {
+      // Close popovers and take the user to a safe page.
+      setShowNotifications(false);
+      setShowUserMenu(false);
+      navigate('/', { replace: true });
+
+      // Refresh auth + all cached lists so kicked user immediately loses access everywhere.
+      // Keep the kick notification unread so they still see it in the bell.
+      try {
+        await (dispatch as any)(initializeAuth()).unwrap();
+      } catch {
+        // ignore auth refresh errors; data refresh will still clear access-controlled slices
+      }
+
+      await refetchData();
+    } catch (error) {
+      console.error('Error handling kick notification:', error);
+    }
+  };
+
   const clearAllNotifications = async () => {
     try {
       if (clearingNotifications) {
@@ -207,6 +263,15 @@ export default function Navbar({ children }: NavbarProps) {
     };
   }, [user?.id]);
 
+  // Auto-handle kick notification: refresh data and redirect to dashboard.
+  useEffect(() => {
+    const kickNotif = notifications.find((n) => n?.type === 'team_member_kicked' && n?._id);
+    if (!kickNotif) return;
+    if (handledKickIds.current.has(String(kickNotif._id))) return;
+    handleKicked(kickNotif);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notifications]);
+
   // Refresh notifications when dropdown opens
   useEffect(() => {
     if (showNotifications) {
@@ -219,6 +284,17 @@ export default function Navbar({ children }: NavbarProps) {
 
     const fetchCompanyNameFallback = async () => {
       if (!user) {
+        setCompanyNameFallback(null);
+        return;
+      }
+
+      const userTeams = Array.isArray((user as any)?.teams) ? (user as any).teams : null;
+      const hasTeam =
+        (Array.isArray(userTeams) && userTeams.length > 0) ||
+        (Array.isArray(teams) && teams.length > 0);
+
+      // If the user isn't in a team, never show a company/team badge.
+      if (!hasTeam) {
         setCompanyNameFallback(null);
         return;
       }
@@ -264,9 +340,17 @@ export default function Navbar({ children }: NavbarProps) {
     return () => {
       isCancelled = true;
     };
-  }, [token, user]);
+  }, [token, user, teams]);
 
-  const displayCompanyName = user?.companyName || companyNameFallback;
+  const displayCompanyName = (() => {
+    const userTeams = Array.isArray((user as any)?.teams) ? (user as any).teams : null;
+    const hasTeam =
+      (Array.isArray(userTeams) && userTeams.length > 0) ||
+      (Array.isArray(teams) && teams.length > 0);
+
+    if (!hasTeam) return null;
+    return user?.companyName || companyNameFallback;
+  })();
   
   return (
     <header className="sticky top-0 z-30 border-b border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-800">

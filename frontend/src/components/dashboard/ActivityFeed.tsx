@@ -80,7 +80,8 @@ export default function ActivityFeed({ activities }: ActivityFeedProps) {
             const count = group.count;
             const time = group.latestCreatedAt;
             return (
-              <div key={group.key} className="flex gap-3 pb-6">
+              // `group.key` can repeat if the same activity pattern appears again later.
+              <div key={`${group.key}::${i}`} className="flex gap-3 pb-6">
                 <div className="relative">
                   <Avatar name={activity.user?.name || 'User'} size="sm" />
                   {i !== groupedActivities.length - 1 && (

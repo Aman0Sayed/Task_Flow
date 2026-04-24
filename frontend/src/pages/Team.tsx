@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from "react";
+import { useData } from '../context/DataContext';
 import { Trash2 } from "lucide-react";
 import Avatar from "../components/ui/Avatar";
 import AddTeamMemberModal from "../components/modals/AddTeamMemberModal";
@@ -9,6 +10,7 @@ import { isManager } from "../lib/managerUtils";
 
 const Team: React.FC = () => {
   const user = useAppSelector((state) => state.auth.user);
+  const { refetchData } = useData();
   const [teamMembers, setTeamMembers] = useState<any[]>([]);
   const [teams, setTeams] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -139,10 +141,12 @@ const Team: React.FC = () => {
 
   const handleAddMemberSuccess = () => {
     fetchTeamData();
+    try { refetchData(); } catch (e) { /* ignore if provider not present */ }
   };
 
   const handleCreateTeamSuccess = () => {
     fetchTeamData();
+    try { refetchData(); } catch (e) { /* ignore if provider not present */ }
   };
 
   const handleRemoveMember = async () => {
@@ -164,6 +168,7 @@ const Team: React.FC = () => {
         setShowDeleteConfirm(false);
         setMemberToDelete(null);
         fetchTeamData();
+        try { refetchData(); } catch (e) { /* ignore if provider not present */ }
       } else {
         const errorData = await res.json();
         alert('Error removing member: ' + (errorData.message || 'Unknown error'));

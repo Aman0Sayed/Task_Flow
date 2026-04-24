@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { Filter, Search, Plus, ListFilter, LayoutGrid } from 'lucide-react';
 import TaskCard from '../components/dashboard/TaskCard';
 import Badge from '../components/ui/Badge';
@@ -54,7 +54,308 @@ export default function Tasks() {
   const [searchTerm, setSearchTerm] = useState('');
   const [isNewTaskModalOpen, setIsNewTaskModalOpen] = useState(false);
 
-  const { tasks, isLoading, refetchData } = useData();
+  const { tasks, projects, teams, users, isLoading, refetchData } = useData();
+
+  const [assignTeamSnapshot, setAssignTeamSnapshot] = useState<{ teamId: string; owner?: any; members: any[] } | null>(null);
+  const [assignTask, setAssignTask] = useState<any | null>(null);
+  const [selectedAssigneeId, setSelectedAssigneeId] = useState('');
+  const [assignMode, setAssignMode] = useState<'set' | 'add'>('set');
+  const [assignError, setAssignError] = useState<string | null>(null);
+  const [assigning, setAssigning] = useState(false);
+
+  const canAssignTasks = (user?.role || '').toLowerCase() === 'manager';
+
+  const getId = (value: any) => {
+    if (!value) return null;
+    return (value._id || value.id || value) as string;
+  };
+
+  const getProjectIdFromTask = (task: any) => {
+    if (!task) return null;
+    const project = task.project || task.projectId;
+    if (!project) return null;
+    const projectId = (typeof project === 'string') ? project : getId(project);
+    return projectId;
+  };
+
+  const assignableMembers = useMemo(() => {
+    if (!assignTask) return [];
+
+    const projectId = getProjectIdFromTask(assignTask);
+    const projectFromTask = typeof assignTask?.project === 'object' ? assignTask.project : null;
+    const project = projectFromTask || projects.find((p: any) => getId(p) === projectId);
+
+    const rawUsers: any[] = [];
+    // Prefer team members when project is linked to a team.
+    const teamId = getId(project?.team);
+    if (teamId) {
+      const team = teams.find((t: any) => getId(t) === teamId);
+
+      const snapshot = assignTeamSnapshot && assignTeamSnapshot.teamId === String(teamId) ? assignTeamSnapshot : null;
+      const effectiveOwner = snapshot?.owner ?? team?.owner;
+      const effectiveMembers = snapshot?.members ?? (Array.isArray(team?.members) ? team.members : []);
+
+      if (effectiveOwner) rawUsers.push(effectiveOwner);
+      if (Array.isArray(effectiveMembers)) {
+        for (const member of effectiveMembers) rawUsers.push(member?.user ?? member);
+      }
+    } else {
+      // No linked team: include project owner/members and other teams' members
+      if (project?.owner) rawUsers.push(project.owner);
+      if (Array.isArray(project?.members)) {
+        for (const member of project.members) {
+          rawUsers.push(member?.user ?? member);
+        }
+      }
+
+      // If project has no linked team, include members from teams the current user
+      // belongs to so managers can pick teammates (they may need adding to project).
+      if (Array.isArray(teams)) {
+        for (const t of teams) {
+          if (t?.owner) rawUsers.push(t.owner);
+          if (Array.isArray(t?.members)) {
+            for (const member of t.members) rawUsers.push(member?.user ?? member);
+          }
+        }
+      }
+    }
+
+    const normalized = rawUsers
+      .map((u) => {
+        if (!u) return null;
+        const id = getId(u);
+        if (!id) return null;
+        const found = users.find((uu: any) => getId(uu) && getId(uu) === id);
+        // Use name first, fallback to email so we don't show 'Unknown'
+        const name = u?.name || found?.name || u?.email || found?.email;
+        if (!name) return null;
+        return {
+          id,
+          name,
+          email: u?.email || found?.email,
+          avatar: u?.avatar || found?.avatar
+        };
+      })
+      .filter(Boolean) as Array<{ id: string; name: string; email?: string; avatar?: string }>;
+
+    const unique = new Map<string, { id: string; name: string; email?: string; avatar?: string }>();
+    const currentUserId = getId(user);
+    for (const member of normalized) {
+      // Exclude the current user (manager) from the assignable list
+      if (currentUserId && member.id.toString() === currentUserId.toString()) {
+        continue;
+      }
+      unique.set(member.id.toString(), member);
+    }
+
+    const result = Array.from(unique.values()).sort((a, b) => a.name.localeCompare(b.name));
+
+    // Mark which users are already project members
+    const projectMemberIds = new Set<string>();
+    if (project?.owner) projectMemberIds.add(getId(project.owner));
+    if (Array.isArray(project?.members)) {
+      for (const m of project.members) {
+        const uid = getId(m?.user ?? m);
+        if (uid) projectMemberIds.add(uid);
+      }
+    }
+
+    return result.map(r => ({ ...r, inProject: projectMemberIds.has(r.id) }));
+  }, [assignTask, assignTeamSnapshot, projects, teams, users]);
+
+  const assignedUserIds = useMemo(() => {
+    const ids = new Set<string>();
+    const primaryId = getId(assignTask?.assignee);
+    if (primaryId) ids.add(primaryId.toString());
+
+    if (Array.isArray(assignTask?.assignees)) {
+      for (const a of assignTask.assignees) {
+        const id = getId(a);
+        if (id) ids.add(id.toString());
+      }
+    }
+
+    return ids;
+  }, [assignTask]);
+
+  // When opening the assign modal, fetch the full team data if it's not present
+  // in the `teams` array so we can include its members in the dropdown.
+  const fetchTeamSnapshot = async (teamId: string) => {
+    try {
+      const token = localStorage.getItem('token');
+      const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      const res = await fetch(`${BASE_URL}/api/teams/${teamId}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) return null;
+      const data = await res.json().catch(() => ({}));
+      const team = data?.data || data;
+      return {
+        teamId: String(teamId),
+        owner: team?.owner,
+        members: Array.isArray(team?.members) ? team.members : [],
+      };
+    } catch {
+      return null;
+    }
+  };
+
+  const openAssignModal = async (task: any) => {
+    setAssignError(null);
+    setAssignTask(task);
+    setAssignMode('set');
+    setSelectedAssigneeId('');
+    setAssignTeamSnapshot(null);
+
+    // Ensure data is fresh so we don't show stale members
+    try {
+      await refetchData();
+    } catch (e) {
+      // ignore
+    }
+
+    const projectId = getProjectIdFromTask(task);
+    const projectFromTask = typeof task?.project === 'object' ? task.project : null;
+    const project = projectFromTask || projects.find((p: any) => getId(p) === projectId);
+    const teamId = getId(project?.team);
+
+    if (!teamId) {
+      return;
+    }
+
+    const snapshot = await fetchTeamSnapshot(String(teamId));
+    if (snapshot) setAssignTeamSnapshot(snapshot);
+  };
+
+  const openAddAssigneeModal = async (task: any) => {
+    setAssignError(null);
+    setAssignTask(task);
+    setAssignMode('add');
+    setSelectedAssigneeId('');
+    setAssignTeamSnapshot(null);
+
+    // Refresh data so assignables are current
+    try {
+      await refetchData();
+    } catch (e) {
+      // ignore
+    }
+
+    const projectId = getProjectIdFromTask(task);
+    const projectFromTask = typeof task?.project === 'object' ? task.project : null;
+    const project = projectFromTask || projects.find((p: any) => getId(p) === projectId);
+    const teamId = getId(project?.team);
+
+    if (!teamId) {
+      return;
+    }
+
+    const snapshot = await fetchTeamSnapshot(String(teamId));
+    if (snapshot) setAssignTeamSnapshot(snapshot);
+  }
+
+  useEffect(() => {
+    if (!assignTask) return;
+    const candidates = assignMode === 'add'
+      ? assignableMembers.filter((m: any) => !assignedUserIds.has(m.id?.toString?.() ?? String(m.id)))
+      : assignableMembers;
+
+    const defaultAssignee = candidates[0]?.id || '';
+    if (defaultAssignee && !selectedAssigneeId) {
+      setSelectedAssigneeId(defaultAssignee);
+    }
+  }, [assignTask, assignableMembers, assignMode, assignedUserIds, selectedAssigneeId]);
+
+  const submitAssignment = async () => {
+    if (!assignTask) return;
+    if (!selectedAssigneeId) {
+      setAssignError('Select a team member to assign.');
+      return;
+    }
+
+    setAssigning(true);
+    setAssignError(null);
+
+    const token = localStorage.getItem('token');
+    const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+    const taskId = getId(assignTask);
+    const projectId = getProjectIdFromTask(assignTask);
+
+    try {
+      let existingAssignees = Array.from(assignedUserIds);
+
+      // In add mode, fetch the latest task so we don't accidentally overwrite assignees
+      // if the current list view/task object is stale.
+      if (assignMode === 'add' && taskId) {
+        const currentRes = await fetch(`${BASE_URL}/api/tasks/${taskId}`, {
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (currentRes.ok) {
+          const currentData = await currentRes.json().catch(() => ({}));
+          const latest = currentData?.data;
+          const ids = new Set<string>(existingAssignees);
+          const primaryId = getId(latest?.assignee);
+          if (primaryId) ids.add(primaryId.toString());
+          if (Array.isArray(latest?.assignees)) {
+            for (const a of latest.assignees) {
+              const id = getId(a);
+              if (id) ids.add(id.toString());
+            }
+          }
+          existingAssignees = Array.from(ids);
+        }
+      }
+
+      const body = assignMode === 'add'
+        ? { assignees: Array.from(new Set([...existingAssignees, selectedAssigneeId])) }
+        : { assignee: selectedAssigneeId };
+
+      // If the selected user is not a project member, attempt to add them first.
+      const selected = assignableMembers.find((m: any) => m.id === selectedAssigneeId);
+      if (selected && selected.inProject === false && projectId) {
+        const addRes = await fetch(`${BASE_URL}/api/projects/${projectId}/members`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ userId: selectedAssigneeId, role: 'member' }),
+        });
+
+        if (!addRes.ok) {
+          const addData = await addRes.json().catch(() => ({}));
+          throw new Error(addData?.error || addData?.message || 'Failed to add member to project');
+        }
+      }
+
+      const res = await fetch(`${BASE_URL}/api/tasks/${taskId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(body),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data?.success) {
+        throw new Error(data?.error || data?.message || 'Failed to assign task');
+      }
+
+      // Update local task state immediately
+      if (data.data) {
+        setAssignTask(null);
+        setSelectedAssigneeId('');
+        setAssignMode('set');
+        // Refetch after a short delay to ensure backend has fully processed
+        setTimeout(() => refetchData(), 300);
+      }
+    } catch (err) {
+      setAssignError(err instanceof Error ? err.message : 'Failed to assign task');
+    } finally {
+      setAssigning(false);
+    }
+  };
 
   // Get search term from URL parameters
   useEffect(() => {
@@ -191,7 +492,14 @@ export default function Tasks() {
       ) : view === 'grid' ? (
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {filteredTasks.map(task => (
-            <TaskCard key={task.id || task._id} task={task} />
+            <TaskCard
+              key={task.id || task._id}
+              task={task}
+              showAssignButton={canAssignTasks && !task.assignee}
+              onAssignClick={openAssignModal}
+              showAddAssigneeButton={canAssignTasks && !!task.assignee}
+              onAddAssigneeClick={openAddAssigneeModal}
+            />
           ))}
           
           {filteredTasks.length === 0 && (
@@ -253,11 +561,35 @@ export default function Tasks() {
                           <div className="h-6 w-6 rounded-full bg-primary-500" />
                         </div>
                         <div className="ml-3">
-                          <p className="text-sm">{task.assignee.name}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm">{task.assignee.name}</p>
+                            {canAssignTasks && (
+                              <button
+                                type="button"
+                                onClick={() => openAddAssigneeModal(task)}
+                                className="inline-flex h-5 w-5 items-center justify-center rounded border border-gray-300 bg-white text-xs font-semibold text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+                                title="Add another assignee"
+                              >
+                                +
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     ) : (
-                      <span className="text-sm text-gray-500 dark:text-gray-400">Unassigned</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-500 dark:text-gray-400">Unassigned</span>
+                        {canAssignTasks && (
+                          <button
+                            type="button"
+                            onClick={() => openAssignModal(task)}
+                            className="rounded-md border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
+                            title="Assign this task to a team member"
+                          >
+                            Assign
+                          </button>
+                        )}
+                      </div>
                     )}
                   </td>
                   <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-700 dark:text-gray-300">
@@ -283,6 +615,79 @@ export default function Tasks() {
         onClose={() => setIsNewTaskModalOpen(false)}
         onSubmit={handleNewTask}
       />
+
+      {assignTask && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => !assigning && setAssignTask(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-gray-700 dark:bg-gray-900"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="border-b border-gray-200 px-5 py-3 dark:border-gray-700">
+              <h3 className="text-base font-semibold text-gray-900 dark:text-white">{assignMode === 'add' ? 'Add Assignee' : 'Assign Task'}</h3>
+              <p className="mt-1 line-clamp-1 text-xs text-gray-500 dark:text-gray-400">{assignTask?.title}</p>
+            </div>
+            <div className="space-y-4 p-5">
+              <div>
+                <label className="mb-1 block text-sm font-medium text-gray-700 dark:text-gray-300">Team member</label>
+                <select
+                  value={selectedAssigneeId}
+                  onChange={(event) => setSelectedAssigneeId(event.target.value)}
+                  className="w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-800 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-700 dark:bg-gray-950 dark:text-gray-200"
+                >
+                  <option value="" disabled>
+                    Select a member...
+                  </option>
+                  {(assignMode === 'add'
+                    ? assignableMembers.filter((member: any) => !assignedUserIds.has(member.id?.toString?.() ?? String(member.id)))
+                    : assignableMembers
+                  ).map((member) => (
+                    <option key={member.id} value={member.id}>
+                      {member.name}{member.email ? ` (${member.email})` : ''}
+                    </option>
+                  ))}
+                </select>
+                {assignMode === 'add' && assignableMembers.filter((member: any) => !assignedUserIds.has(member.id?.toString?.() ?? String(member.id))).length === 0 ? (
+                  <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                    Everyone is already assigned to this task.
+                  </p>
+                ) : assignableMembers.length === 0 ? (
+                  <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                    No project members found for this task.
+                  </p>
+                ) : null}
+              </div>
+
+              {assignError && (
+                <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 dark:border-red-900/40 dark:bg-red-900/20 dark:text-red-300">
+                  {assignError}
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 border-t border-gray-200 pt-4 dark:border-gray-700">
+                <button
+                  type="button"
+                  onClick={() => setAssignTask(null)}
+                  disabled={assigning}
+                  className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={submitAssignment}
+                  disabled={assigning || !selectedAssigneeId || assignableMembers.length === 0}
+                  className="rounded-md bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {assigning ? (assignMode === 'add' ? 'Adding...' : 'Assigning...') : (assignMode === 'add' ? 'Add' : 'Assign')}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
  );
 }

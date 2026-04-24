@@ -16,7 +16,7 @@ export default function NewTaskModal({ isOpen, onClose, onSubmit }: NewTaskModal
     description: '',
     status: 'To Do',
     priority: 'Medium',
-    assignee: user ? user.id : '',
+    assignee: '',
     project: '',
     dueDate: '',
   });
@@ -49,15 +49,17 @@ export default function NewTaskModal({ isOpen, onClose, onSubmit }: NewTaskModal
     if (status === 'Completed') status = 'done';
     let priority = formData.priority.toLowerCase();
     if (priority === 'critical') priority = 'urgent';
-    const newTask = {
+    const newTask: any = {
       title: formData.title,
       description: formData.description,
       status,
       priority,
-      assignee: user.id,
       project: formData.project,
       dueDate: formData.dueDate,
     };
+
+    // Do not automatically assign the manager — only include assignee when explicitly selected
+    if (formData.assignee) newTask.assignee = formData.assignee;
     onSubmit(newTask);
     onClose();
   };
@@ -151,8 +153,8 @@ export default function NewTaskModal({ isOpen, onClose, onSubmit }: NewTaskModal
                 className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:bg-gray-700"
                 disabled
               >
-                <option value={user ? user.id : ''}>
-                  {user ? user.name : 'Unassigned'}
+                <option value="">
+                  Unassigned
                 </option>
               </select>
             </div>

@@ -11,10 +11,12 @@ const {
   getAllTasks
 } = require('../controllers/taskController');
 const { protect } = require('../middlewares/auth');
+const requireTeamForUserRole = require('../middlewares/requireTeamForUserRole');
 
 const router = express.Router();
 
 router.use(protect); // All routes require authentication
+router.use(requireTeamForUserRole);
 
 router
   .route('/')

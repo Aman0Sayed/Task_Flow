@@ -22,6 +22,7 @@ import Signup from './pages/Signup';
 import ManagerSetup from './pages/ManagerSetup';
  
 import ProtectedRoute from './components/auth/ProtectedRoute';
+import TeamRequiredRoute from './components/auth/TeamRequiredRoute';
 import UnderConstructionModal from './components/modals/UnderConstructionModal';
 import { AuthProvider } from './context/AuthContext';
 import { DataProvider } from './context/DataContext';
@@ -66,9 +67,9 @@ function App() {
             </ProtectedRoute>
           }>
             <Route index element={<Dashboard />} />
-            <Route path="projects" element={<Projects />} />
-            <Route path="tasks" element={<Tasks />} />
-            <Route path="tasks/:id" element={<TaskDetails />} />
+            <Route path="projects" element={<TeamRequiredRoute><Projects /></TeamRequiredRoute>} />
+            <Route path="tasks" element={<TeamRequiredRoute><Tasks /></TeamRequiredRoute>} />
+            <Route path="tasks/:id" element={<TeamRequiredRoute><TaskDetails /></TeamRequiredRoute>} />
             <Route path="team" element={<Team />} />
             <Route path="calendar" element={<Calendar />} />
             <Route path="reports" element={<Reports />} />
@@ -76,7 +77,7 @@ function App() {
             <Route path="profile" element={<Profile />} />
             <Route path="help" element={<Help />} />
             <Route path="documentation" element={<Documentation />} />
-            <Route path="kanban" element={<KanbanBoard />} />
+            <Route path="kanban" element={<TeamRequiredRoute><KanbanBoard /></TeamRequiredRoute>} />
             <Route path="*" element={<NotFound />} />
           </Route>
 

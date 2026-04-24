@@ -5,25 +5,38 @@ const Task = require('../models/Task');
 const Project = require('../models/Project');
 const Activity = require('../models/Activity');
 const asyncHandler = require('../utils/asyncHandler');
+const Team = require('../models/Team');
+const requireTeamForUserRole = require('../middlewares/requireTeamForUserRole');
 
 const router = express.Router();
 
 router.use(protect);
+router.use(requireTeamForUserRole);
 
 // Get dashboard stats
 router.get('/dashboard', asyncHandler(async (req, res) => {
+  const userId = req.user && (req.user._id || req.user.id);
+
+  const userTeams = await Team.find({
+    tenantId: req.tenantId,
+    $or: [ { owner: userId }, { 'members.user': userId } ]
+  }).select('_id');
+  const userTeamIds = userTeams.map(t => t._id);
+
   // Get user's projects
   const projects = await Project.find({
+    tenantId: req.tenantId,
     $or: [
-      { owner: req.user.id },
-      { 'members.user': req.user.id }
+      { owner: userId },
+      { 'members.user': userId },
+      ...(userTeamIds.length > 0 ? [{ team: { $in: userTeamIds } }] : [])
     ]
   });
 
   const projectIds = projects.map(p => p._id);
 
   // Get task statistics
-  const tasks = await Task.find({ project: { $in: projectIds } });
+  const tasks = await Task.find({ tenantId: req.tenantId, project: { $in: projectIds } });
   
   const taskStats = {
     total: tasks.length,
@@ -43,7 +56,7 @@ router.get('/dashboard', asyncHandler(async (req, res) => {
   };
 
   // Get recent activities
-  const recentActivities = await Activity.find({ project: { $in: projectIds } })
+  const recentActivities = await Activity.find({ tenantId: req.tenantId, project: { $in: projectIds } })
     .populate('user', 'name email avatar')
     .populate('project', 'name')
     .sort('-createdAt')
@@ -51,6 +64,7 @@ router.get('/dashboard', asyncHandler(async (req, res) => {
 
   // Get upcoming deadlines
   const upcomingDeadlines = await Task.find({
+    tenantId: req.tenantId,
     project: { $in: projectIds },
     dueDate: { $gte: new Date(), $lte: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000) },
     status: { $ne: 'done' }
@@ -73,9 +87,11 @@ router.get('/dashboard', asyncHandler(async (req, res) => {
 
 // Get project report
 router.get('/project/:projectId', asyncHandler(async (req, res) => {
-  const project = await Project.findById(req.params.projectId)
+  const userId = req.user && (req.user._id || req.user.id);
+
+  const project = await Project.findOne({ _id: req.params.projectId, tenantId: req.tenantId })
     .populate('owner', 'name email')
-    .populate('members.user', 'name email');
+    .populate('members.user', '_id name email');
 
   if (!project) {
     return res.status(404).json({
@@ -84,8 +100,24 @@ router.get('/project/:projectId', asyncHandler(async (req, res) => {
     });
   }
 
+  // Access check: owner/member or linked team member/owner
+  const isOwner = project.owner && project.owner.equals && project.owner.equals(userId);
+  const isMember = Array.isArray(project.members) && project.members.some(m => m.user && m.user.equals && m.user.equals(userId));
+  let isOnTeam = false;
+  if (project.team) {
+    const teamCheck = await Team.findOne({
+      _id: project.team,
+      tenantId: req.tenantId,
+      $or: [{ owner: userId }, { 'members.user': userId }]
+    }).select('_id');
+    isOnTeam = Boolean(teamCheck);
+  }
+  if (!isOwner && !isMember && !isOnTeam) {
+    return res.status(403).json({ success: false, error: 'Not authorized to access this report' });
+  }
+
   // Get task statistics
-  const tasks = await Task.find({ project: req.params.projectId });
+  const tasks = await Task.find({ tenantId: req.tenantId, project: req.params.projectId });
   
   const tasksByStatus = {
     todo: tasks.filter(t => t.status === 'todo').length,
@@ -114,7 +146,7 @@ router.get('/project/:projectId', asyncHandler(async (req, res) => {
   });
 
   // Get activity timeline
-  const activities = await Activity.find({ project: req.params.projectId })
+  const activities = await Activity.find({ tenantId: req.tenantId, project: req.params.projectId })
     .populate('user', 'name email')
     .sort('-createdAt')
     .limit(30);
@@ -150,8 +182,13 @@ router.get('/project/:projectId', asyncHandler(async (req, res) => {
 router.get('/user/:userId', asyncHandler(async (req, res) => {
   const userId = req.params.userId === 'me' ? req.user.id : req.params.userId;
 
+  // Only allow the user themself, or privileged roles, to view user report.
+  if (String(userId) !== String(req.user.id) && req.user?.role !== 'admin' && req.user?.role !== 'manager') {
+    return res.status(403).json({ success: false, error: 'Not authorized to access this report' });
+  }
+
   // Get user's tasks
-  const tasks = await Task.find({ assignee: userId })
+  const tasks = await Task.find({ tenantId: req.tenantId, assignee: userId })
     .populate('project', 'name');
 
   // Task statistics
@@ -179,7 +216,7 @@ router.get('/user/:userId', asyncHandler(async (req, res) => {
   });
 
   // Activity history
-  const activities = await Activity.find({ user: userId })
+  const activities = await Activity.find({ tenantId: req.tenantId, user: userId })
     .populate('project', 'name')
     .sort('-createdAt')
     .limit(50);

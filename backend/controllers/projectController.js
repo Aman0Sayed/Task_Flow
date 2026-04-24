@@ -1,15 +1,32 @@
 // controllers/projectController.js
 const Project = require('../models/Project');
 const Activity = require('../models/Activity');
+const Team = require('../models/Team');
 const asyncHandler = require('../utils/asyncHandler');
 const ErrorResponse = require('../utils/errorResponse');
 
-// Get all projects for user
+// Get all projects accessible to the current user
 exports.getProjects = asyncHandler(async (req, res, next) => {
-  // Filter projects by tenant
-  const projects = await Project.find({ tenantId: req.tenantId })
+  // Build access filter: owner OR project member OR linked team the user belongs to
+  const userId = req.user && (req.user._id || req.user.id);
+
+  // Find teams the user currently belongs to (owner or member).
+  const userTeams = await Team.find({
+    tenantId: req.tenantId,
+    $or: [ { owner: userId }, { 'members.user': userId } ]
+  }).select('_id');
+  const userTeamIds = userTeams.map(t => t._id);
+
+  const projects = await Project.find({
+    tenantId: req.tenantId,
+    $or: [
+      { owner: userId },
+      { 'members.user': userId },
+      ...(userTeamIds.length > 0 ? [{ team: { $in: userTeamIds } }] : [])
+    ]
+  })
     .populate('owner', 'name email avatar')
-    .populate('members.user', 'name email avatar')
+    .populate('members.user', '_id name email avatar')
     .populate('team', 'name')
     .sort('-createdAt');
 
@@ -20,18 +37,38 @@ exports.getProjects = asyncHandler(async (req, res, next) => {
   });
 });
 
-// Get single project
+// Get single project (only if user has access)
 exports.getProject = asyncHandler(async (req, res, next) => {
   const project = await Project.findOne({
     _id: req.params.id,
     tenantId: req.tenantId
   })
     .populate('owner', 'name email avatar')
-    .populate('members.user', 'name email avatar')
+    .populate('members.user', '_id name email avatar')
     .populate('team', 'name');
 
   if (!project) {
     return next(new ErrorResponse(`Project not found with id of ${req.params.id}`, 404));
+  }
+
+  const userId = req.user && (req.user._id || req.user.id);
+
+  // Check whether the user belongs to the project's linked team (owner or member)
+  let isOnTeam = false;
+  if (project.team) {
+    const teamCheck = await Team.findOne({
+      _id: project.team,
+      tenantId: req.tenantId,
+      $or: [ { owner: userId }, { 'members.user': userId } ]
+    }).select('_id');
+    isOnTeam = Boolean(teamCheck);
+  }
+
+  const isOwner = project.owner && project.owner.equals && project.owner.equals(userId);
+  const isMember = Array.isArray(project.members) && project.members.some(m => m.user && m.user.equals && m.user.equals(userId));
+
+  if (!isOwner && !isMember && !isOnTeam) {
+    return next(new ErrorResponse('Not authorized to view this project', 403));
   }
 
   res.status(200).json({
@@ -83,10 +120,10 @@ exports.updateProject = asyncHandler(async (req, res, next) => {
 
   // Check if user is owner or admin
   const isAdmin = project.members.some(member => 
-    member.user.equals(req.user.id) && member.role === 'admin'
+    member.user && member.user.equals && member.user.equals(req.user.id) && member.role === 'admin'
   );
 
-  if (!project.owner.equals(req.user.id) && !isAdmin) {
+  if (!project.owner || !project.owner.equals || !project.owner.equals(req.user.id) && !isAdmin) {
     return next(new ErrorResponse('Not authorized to update this project', 403));
   }
 
@@ -131,7 +168,7 @@ exports.deleteProject = asyncHandler(async (req, res, next) => {
   }
 
   // Check if user is owner
-  if (!project.owner.equals(req.user.id)) {
+  if (!project.owner || !project.owner.equals || !project.owner.equals(req.user.id)) {
     return next(new ErrorResponse('Not authorized to delete this project', 403));
   }
 
@@ -164,16 +201,16 @@ exports.addMember = asyncHandler(async (req, res, next) => {
 
   // Check if user is owner or admin
   const isAdmin = project.members.some(member => 
-    member.user.equals(req.user.id) && member.role === 'admin'
+    member.user && member.user.equals && member.user.equals(req.user.id) && member.role === 'admin'
   );
 
-  if (!project.owner.equals(req.user.id) && !isAdmin) {
+  if (!project.owner || !project.owner.equals || !project.owner.equals(req.user.id) && !isAdmin) {
     return next(new ErrorResponse('Not authorized to add members to this project', 403));
   }
 
   // Check if member already exists
   const memberExists = project.members.some(member => 
-    member.user.equals(req.body.userId)
+    member.user && member.user.equals && member.user.equals(req.body.userId)
   );
 
   if (memberExists) {
@@ -216,15 +253,15 @@ exports.removeMember = asyncHandler(async (req, res, next) => {
 
   // Check if user is owner or admin
   const isAdmin = project.members.some(member => 
-    member.user.equals(req.user.id) && member.role === 'admin'
+    member.user && member.user.equals && member.user.equals(req.user.id) && member.role === 'admin'
   );
 
-  if (!project.owner.equals(req.user.id) && !isAdmin) {
+  if (!project.owner || !project.owner.equals || !project.owner.equals(req.user.id) && !isAdmin) {
     return next(new ErrorResponse('Not authorized to remove members from this project', 403));
   }
 
   project.members = project.members.filter(member => 
-    !member.user.equals(req.params.userId)
+    !member.user || !member.user.equals || !member.user.equals(req.params.userId)
   );
 
   await project.save();

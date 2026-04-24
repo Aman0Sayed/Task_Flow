@@ -21,7 +21,7 @@ router.get('/', asyncHandler(async (req, res) => {
     ]
   })
   .populate('owner', 'name email avatar companyName')
-  .populate('members.user', 'name email avatar')
+  .populate('members.user', '_id name email avatar')
   .populate('projects', 'name status')
   .sort('-createdAt');
 
@@ -42,7 +42,7 @@ router.get('/:id', asyncHandler(async (req, res, next) => {
     tenantId: req.tenantId
   })
     .populate('owner', 'name email avatar companyName')
-    .populate('members.user', 'name email avatar')
+    .populate('members.user', '_id name email avatar')
     .populate('projects', 'name status progress');
 
   if (!team) {
@@ -216,6 +216,8 @@ router.put('/:id/members/:userId', asyncHandler(async (req, res, next) => {
 
 // Remove member (kick)
 router.delete('/:id/members/:userId', teamController.removeMember);
+// Repair: re-run cleanup for a user (owner-only)
+router.post('/:id/members/:userId/cleanup', teamController.cleanupMemberAccess);
 
 // Add member
 router.post('/:id/add-member', teamController.addMember);

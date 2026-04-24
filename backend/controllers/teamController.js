@@ -2,6 +2,7 @@
 const Team = require('../models/Team');
 const User = require('../models/User');
 const Project = require('../models/Project');
+const Task = require('../models/Task');
 const Activity = require('../models/Activity');
 const TeamInvitation = require('../models/TeamInvitation');
 const Notification = require('../models/Notification');
@@ -9,6 +10,8 @@ const asyncHandler = require('../utils/asyncHandler');
 const ErrorResponse = require('../utils/errorResponse');
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
+const mongoose = require('mongoose');
+const { cleanupTeamMemberAccess } = require('../utils/teamMemberCleanup');
 
 // Generate unique TaskFlow ID (like social media username)
 const generateTaskflowId = async (name) => {
@@ -52,7 +55,7 @@ exports.getAllTeams = asyncHandler(async (req, res, next) => {
     members: { $not: { $elemMatch: { user: currentUserId } } }
   })
     .populate('owner', 'name email avatar companyName')
-    .populate('members.user', 'name email avatar')
+    .populate('members.user', '_id name email avatar')
     .select('name description owner members createdAt tenantId')
     .sort('-createdAt');
 
@@ -88,8 +91,7 @@ exports.getTeam = asyncHandler(async (req, res, next) => {
     tenantId: req.tenantId
   })
     .populate('owner', 'name email avatar')
-    .populate('members.user', 'name email avatar')
-    .populate('projects', 'name status progress');
+  .populate('members.user', '_id name email avatar')
 
   if (!team) {
     return next(new ErrorResponse(`Team not found with id of ${req.params.id}`, 404));
@@ -226,10 +228,24 @@ exports.deleteTeam = asyncHandler(async (req, res, next) => {
   }
 
   // Remove team from all users
-  await User.updateMany(
-    { teams: team._id },
-    { $pull: { teams: team._id } }
-  );
+  const affectedUsers = await User.find({ teams: team._id }).select('_id role teams');
+  await User.updateMany({ teams: team._id }, { $pull: { teams: team._id } });
+
+  // Reset regular users who now have no remaining teams.
+  const affectedUserIds = affectedUsers
+    .filter((u) => String(u.role).toLowerCase() === 'user')
+    .map((u) => u._id.toString());
+
+  if (affectedUserIds.length > 0) {
+    const usersAfter = await User.find({ _id: { $in: affectedUserIds } }).select('_id teams');
+    const resetIds = usersAfter.filter((u) => !Array.isArray(u.teams) || u.teams.length === 0).map((u) => u._id);
+    if (resetIds.length > 0) {
+      await User.updateMany(
+        { _id: { $in: resetIds } },
+        { $set: { tenantId: 'default_user_tenant', companyName: null } }
+      );
+    }
+  }
 
   // Remove team-bound join/invitation records
   await TeamInvitation.deleteMany({ team: team._id });
@@ -423,6 +439,13 @@ exports.addMember = asyncHandler(async (req, res, next) => {
 
 // Remove member
 exports.removeMember = asyncHandler(async (req, res, next) => {
+  let kickedUserObjectId;
+  try {
+    kickedUserObjectId = new mongoose.Types.ObjectId(req.params.userId);
+  } catch {
+    return next(new ErrorResponse('Invalid user id', 400));
+  }
+  const kickedUserIdRaw = String(req.params.userId);
   const team = await Team.findOne({
     _id: req.params.id,
     tenantId: req.tenantId
@@ -451,8 +474,26 @@ exports.removeMember = asyncHandler(async (req, res, next) => {
   await team.save();
 
   // Remove team from user
-  await User.findByIdAndUpdate(req.params.userId, {
+  const updatedUser = await User.findByIdAndUpdate(req.params.userId, {
     $pull: { teams: team._id }
+  }, { new: true }).select('_id role teams tenantId companyName');
+
+  // If the removed member is a regular user and is no longer on ANY team,
+  // reset them back to the default "not in a company/team" state.
+  if (updatedUser && String(updatedUser.role).toLowerCase() === 'user') {
+    const remainingTeams = Array.isArray(updatedUser.teams) ? updatedUser.teams.length : 0;
+    if (remainingTeams === 0) {
+      await User.findByIdAndUpdate(updatedUser._id, {
+        $set: { tenantId: 'default_user_tenant', companyName: null }
+      });
+    }
+  }
+
+  // Remove this user from any projects/tasks linked to this team.
+  const cleanupResult = await cleanupTeamMemberAccess({
+    tenantId: req.tenantId,
+    team,
+    userId: req.params.userId
   });
 
   // Clear stale pending invites for this team/user so manager can invite again later.
@@ -484,13 +525,41 @@ exports.removeMember = asyncHandler(async (req, res, next) => {
     type: 'team_member_kicked',
     title: 'Removed From Team',
     message: 'You have been removed from the team.',
-    link: '/team',
+    link: '/',
     relatedTeam: team._id
   });
 
   res.status(200).json({
     success: true,
+    cleanup: cleanupResult,
     data: team
+  });
+});
+
+// Repair endpoint: re-run cleanup for a member (useful if old data existed before cleanup was added).
+exports.cleanupMemberAccess = asyncHandler(async (req, res, next) => {
+  const team = await Team.findOne({
+    _id: req.params.id,
+    tenantId: req.tenantId
+  });
+
+  if (!team) {
+    return next(new ErrorResponse(`Team not found with id of ${req.params.id}`, 404));
+  }
+
+  if (!team.owner.equals(req.user.id)) {
+    return next(new ErrorResponse('Only team owner can run cleanup', 403));
+  }
+
+  const cleanupResult = await cleanupTeamMemberAccess({
+    tenantId: req.tenantId,
+    team,
+    userId: req.params.userId
+  });
+
+  res.status(200).json({
+    success: true,
+    cleanup: cleanupResult
   });
 });
 
@@ -749,7 +818,7 @@ exports.requestJoinTeam = asyncHandler(async (req, res, next) => {
   
   const team = await Team.findById(req.params.id)
     .populate('owner', 'name email')
-    .populate('members.user', 'name email');
+    .populate('members.user', '_id name email');
 
   if (!team) {
     console.log('requestJoinTeam: Team not found');

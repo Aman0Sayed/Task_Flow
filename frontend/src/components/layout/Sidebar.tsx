@@ -11,6 +11,8 @@ import {
   Book
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { useAppSelector } from '../../hooks/hook';
+import { useData } from '../../context/DataContext';
 
 interface SidebarProps {
   closeSidebar: () => void;
@@ -30,6 +32,22 @@ const navigation = [
 
 export default function Sidebar({ closeSidebar }: SidebarProps) {
   const location = useLocation();
+  const user = useAppSelector((state) => state.auth.user);
+  const { teams } = useData();
+
+  const role = String(user?.role || '').toLowerCase();
+  const userTeams = Array.isArray((user as any)?.teams) ? (user as any).teams : null;
+  const hasTeam = (Array.isArray(userTeams) ? userTeams.length > 0 : false) || (Array.isArray(teams) && teams.length > 0);
+
+  const filteredNavigation = navigation.filter((item) => {
+    if (role !== 'user') return true;
+    if (hasTeam) return true;
+    // Member-role users without a team should not see project/task/kanban links.
+    if (item.href === '/projects') return false;
+    if (item.href === '/tasks') return false;
+    if (item.href === '/kanban') return false;
+    return true;
+  });
   
   return (
     <div className="flex h-full flex-col">
@@ -43,7 +61,7 @@ export default function Sidebar({ closeSidebar }: SidebarProps) {
       </div>
       
       <nav className="mt-8 flex-1 space-y-1 px-2">
-        {navigation.map((item) => {
+        {filteredNavigation.map((item) => {
           const isActive = location.pathname === item.href;
           
           return (
