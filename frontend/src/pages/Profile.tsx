@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
-import { Check, X, Copy, Mail, Calendar, Badge, Shield } from 'lucide-react';
+import { Check, X, Copy, Mail, Calendar, Badge, Shield, Download } from 'lucide-react';
+import { QRCodeSVG as QRCode } from 'qrcode.react';
 import { useAppSelector } from '../hooks/hook';
 import { useData } from '../context/DataContext';
 
@@ -8,6 +9,7 @@ export default function Profile() {
   const { projects, teams, tasks } = useData();
   const [copiedType, setCopiedType] = useState<'id' | 'profile' | null>(null);
   const [isEditing, setIsEditing] = useState(false);
+  const [showQRCode, setShowQRCode] = useState(false);
 
   const getInitials = (name: string) =>
     name
@@ -68,6 +70,19 @@ export default function Profile() {
     await navigator.clipboard.writeText(`${window.location.origin}/profile/${user.taskflowId}`);
     setCopiedType('profile');
     setTimeout(() => setCopiedType(null), 2000);
+  };
+
+  const downloadQRCode = () => {
+    const qrElement = document.querySelector('canvas');
+    if (qrElement) {
+      const url = qrElement.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `taskflow-profile-${user?.taskflowId}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
   };
 
   return (
@@ -220,15 +235,12 @@ export default function Profile() {
                 onClick={copyProfileLink}
                 className="w-full rounded-lg bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 transition hover:bg-blue-100 dark:bg-blue-900 dark:text-blue-300 dark:hover:bg-blue-800"
               >
-                {copiedType === 'profile' ? 'Copied!' : 'Copy Profile Link'}
+                {copiedType === 'profile' ? 'Copied!' : 'Copy ID'}
               </button>
-              <button
-                onClick={copyTaskflowId}
-                className="w-full rounded-lg bg-purple-50 px-4 py-2 text-sm font-medium text-purple-700 transition hover:bg-purple-100 dark:bg-purple-900 dark:text-purple-300 dark:hover:bg-purple-800"
+              <button 
+                onClick={() => setShowQRCode(true)}
+                className="w-full rounded-lg bg-green-50 px-4 py-2 text-sm font-medium text-green-700 transition hover:bg-green-100 dark:bg-green-900 dark:text-green-300 dark:hover:bg-green-800"
               >
-                {copiedType === 'id' ? 'Copied!' : 'Share TaskFlow ID'}
-              </button>
-              <button className="w-full rounded-lg bg-green-50 px-4 py-2 text-sm font-medium text-green-700 transition hover:bg-green-100 dark:bg-green-900 dark:text-green-300 dark:hover:bg-green-800">
                 Generate QR Code
               </button>
             </div>
@@ -288,6 +300,54 @@ export default function Profile() {
                 <button onClick={() => setIsEditing(false)} className="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white transition hover:bg-blue-700">
                   <Check className="mr-2 inline h-4 w-4" />
                   Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showQRCode && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+          onClick={() => setShowQRCode(false)}
+        >
+          <div
+            className="w-full max-w-md rounded-xl bg-white shadow-2xl dark:bg-gray-900"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="border-b border-gray-200 px-5 py-3 dark:border-gray-700">
+              <h3 className="text-base font-bold text-gray-900 dark:text-white">Share Profile - QR Code</h3>
+            </div>
+            <div className="flex flex-col items-center gap-4 p-6">
+              <div className="flex items-center justify-center rounded-lg bg-white p-4">
+                <QRCode 
+                  value={`${window.location.origin}/profile/${user?.taskflowId}`}
+                  size={256}
+                  level="H"
+                  includeMargin={true}
+                />
+              </div>
+              <p className="text-center text-sm text-gray-600 dark:text-gray-400">
+                Scan this QR code to share your TaskFlow profile
+              </p>
+              <div className="w-full text-center text-xs font-mono text-gray-500 dark:text-gray-400">
+                {user?.taskflowId}
+              </div>
+
+              <div className="flex w-full gap-3">
+                <button 
+                  onClick={downloadQRCode}
+                  className="flex-1 rounded-lg bg-green-600 px-4 py-2 font-medium text-white transition hover:bg-green-700 flex items-center justify-center gap-2"
+                >
+                  <Download className="h-4 w-4" />
+                  Download
+                </button>
+                <button 
+                  onClick={() => setShowQRCode(false)}
+                  className="flex-1 rounded-lg border border-gray-300 px-4 py-2 font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+                >
+                  Close
                 </button>
               </div>
             </div>
