@@ -16,7 +16,7 @@ exports.searchUserByTaskflowId = asyncHandler(async (req, res, next) => {
   }
 
   const user = await User.findOne({ taskflowId: taskflowId.toLowerCase() })
-    .select('name email avatar taskflowId role -tenantId')
+    .select('name email avatar taskflowId role')
     .lean();
 
   if (!user) {
@@ -77,7 +77,7 @@ exports.getUserByTaskflowId = asyncHandler(async (req, res, next) => {
   }
 
   const user = await User.findOne({ taskflowId: taskflowId.toLowerCase(), isActive: true })
-    .select('name avatar taskflowId role createdAt -tenantId -email -password')
+    .select('name avatar taskflowId role createdAt')
     .populate('teams', 'name description')
     .lean();
 

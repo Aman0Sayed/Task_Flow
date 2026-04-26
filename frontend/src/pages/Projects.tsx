@@ -9,6 +9,7 @@ import { isManager } from '../lib/managerUtils';
 export default function Projects() {
   const user = useAppSelector((state) => state.auth.user);
   const [filter, setFilter] = useState('all');
+  const [searchTerm, setSearchTerm] = useState('');
   const [projects, setProjects] = useState<any[]>([]);
   const [isNewProjectModalOpen, setIsNewProjectModalOpen] = useState(false);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -39,12 +40,20 @@ export default function Projects() {
   };
   const mappedStatus = (filter: string) =>
     statusMap[filter as keyof typeof statusMap] || filter;
-  const filteredProjects = filter === 'all'
-    ? projects
-    : projects.filter(project => {
-        const status = (project.status || '').toLowerCase();
-        return status === mappedStatus(filter);
-      });
+  const filteredProjects = projects.filter(project => {
+    // Filter by status
+    const statusMatch = filter === 'all' || (() => {
+      const status = (project.status || '').toLowerCase();
+      return status === mappedStatus(filter);
+    })();
+
+    // Filter by search term
+    const searchMatch = !searchTerm || 
+      project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      (project.description && project.description.toLowerCase().includes(searchTerm.toLowerCase()));
+
+    return statusMatch && searchMatch;
+  });
 
   const handleNewProject = async (projectData: any) => {
     const token = localStorage.getItem('token');
@@ -113,6 +122,8 @@ export default function Projects() {
             <input
               type="search"
               placeholder="Search projects..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
               className="h-9 w-full rounded-md border border-gray-300 bg-transparent py-2 pl-9 pr-4 text-sm placeholder:text-gray-500 focus:border-primary-500 focus:outline-none focus:ring-1 focus:ring-primary-500 dark:border-gray-600 dark:placeholder:text-gray-400 sm:w-64"
             />
           </div>

@@ -1,14 +1,19 @@
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useState, useEffect } from 'react';
-import { Copy, Mail, Calendar, Shield, Users, Loader } from 'lucide-react';
+import { Copy, Mail, Calendar, Shield, Users, Loader, UserPlus, LogIn } from 'lucide-react';
 import { useAppSelector } from '../hooks/hook';
 
 export default function PublicProfile() {
   const { taskflowId } = useParams();
-  const [profile, setProfile] = useState(null);
+  const navigate = useNavigate();
+  const [profile, setProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [copiedLink, setCopiedLink] = useState(false);
+  const [requestingTeam, setRequestingTeam] = useState<string | null>(null);
+  const [joinedTeams, setJoinedTeams] = useState<Set<string>>(new Set());
+  const [pendingRequests, setPendingRequests] = useState<Set<string>>(new Set());
   const currentUser = useAppSelector((state) => state.auth.user);
 
   useEffect(() => {
@@ -38,6 +43,52 @@ export default function PublicProfile() {
       await navigator.clipboard.writeText(`@${profile.taskflowId}`);
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const copyProfileLink = async () => {
+    if (profile?.taskflowId) {
+      const link = `${window.location.origin}/profile/${profile.taskflowId}`;
+      await navigator.clipboard.writeText(link);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2000);
+    }
+  };
+
+  const requestJoinTeam = async (teamId: string) => {
+    if (!currentUser) {
+      navigate('/login');
+      return;
+    }
+
+    try {
+      setRequestingTeam(teamId);
+      const token = localStorage.getItem('token');
+      const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+      
+      const res = await fetch(`${BASE_URL}/api/teams/${teamId}/join-request`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        }
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        setPendingRequests(new Set([...pendingRequests, teamId]));
+      } else {
+        // Handle error (already member, already has pending request, etc.)
+        if (data.message?.includes('already a member')) {
+          setJoinedTeams(new Set([...joinedTeams, teamId]));
+        } else if (data.message?.includes('pending')) {
+          setPendingRequests(new Set([...pendingRequests, teamId]));
+        }
+      }
+    } catch (err) {
+      console.error('Failed to request join team:', err);
+    } finally {
+      setRequestingTeam(null);
     }
   };
 
@@ -102,6 +153,14 @@ export default function PublicProfile() {
 
   return (
     <div className="animate-fade-in space-y-8">
+      {/* Public Profile Badge */}
+      <div className="mx-auto px-6 py-3 bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg">
+        <p className="text-sm text-blue-700 dark:text-blue-300 text-center flex items-center justify-center gap-2">
+          <Shield className="w-4 h-4" />
+          <strong>Public Profile:</strong> This is a public view. {currentUser ? 'You can request to join their teams below.' : 'Sign in to request joining their teams.'}
+        </p>
+      </div>
+
       {/* Profile Header */}
       <div className="relative">
         {/* Background banner */}
@@ -154,14 +213,26 @@ export default function PublicProfile() {
                   </div>
                 </div>
 
-                {/* Action buttons */}
-                <div className="flex gap-2 pt-4 sm:pt-0 flex-wrap">
-                  <button className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium transition text-sm">
-                    Create Project
-                  </button>
-                  <button className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-medium transition text-sm">
-                    Message
-                  </button>
+                {/* Action buttons - Updated for visitors */}
+                <div className="flex gap-2 pt-4 sm:pt-0 flex-col sm:flex-col w-full sm:w-auto">
+                  {!currentUser ? (
+                    <button 
+                      onClick={() => navigate('/login')}
+                      className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium transition text-sm flex items-center justify-center gap-2"
+                    >
+                      <LogIn className="w-4 h-4" />
+                      Sign In
+                    </button>
+                  ) : (
+                    <>
+                      <button className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium transition text-sm">
+                        Send Message
+                      </button>
+                      <button className="px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-300 font-medium transition text-sm">
+                        View Profile
+                      </button>
+                    </>
+                  )}
                 </div>
               </div>
             </div>
@@ -176,7 +247,7 @@ export default function PublicProfile() {
           {/* Quick Stats */}
           <div className="grid grid-cols-3 gap-4">
             <div className="card p-4 text-center">
-              <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">0</div>
+              <div className="text-2xl font-bold text-blue-600 dark:text-blue-400">-</div>
               <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">Projects</div>
             </div>
             <div className="card p-4 text-center">
@@ -186,12 +257,12 @@ export default function PublicProfile() {
               <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">Teams</div>
             </div>
             <div className="card p-4 text-center">
-              <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">0</div>
+              <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">-</div>
               <div className="text-xs text-gray-600 dark:text-gray-400 mt-1">Tasks</div>
             </div>
           </div>
 
-          {/* Teams Section */}
+          {/* Teams Section - With Join Buttons */}
           {profile?.teams && profile.teams.length > 0 && (
             <div className="card">
               <div className="border-b border-gray-200 px-6 py-4 dark:border-gray-700">
@@ -201,14 +272,51 @@ export default function PublicProfile() {
                 </h3>
               </div>
               <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                {profile.teams.map((team, idx) => (
-                  <div key={idx} className="px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-800 cursor-pointer transition">
-                    <h4 className="font-medium text-gray-900 dark:text-white">{team.name}</h4>
-                    {team.description && (
-                      <p className="text-sm text-gray-600 dark:text-gray-400">{team.description}</p>
+                {profile.teams.map((team: any, idx: number) => (
+                  <div key={idx} className="px-6 py-4 flex items-start justify-between gap-4 hover:bg-gray-50 dark:hover:bg-gray-800 transition">
+                    <div className="flex-1">
+                      <h4 className="font-medium text-gray-900 dark:text-white mb-1">{team.name}</h4>
+                      {team.description && (
+                        <p className="text-sm text-gray-600 dark:text-gray-400">{team.description}</p>
+                      )}
+                    </div>
+                    {currentUser && (
+                      <button
+                        onClick={() => requestJoinTeam(team._id || team.id)}
+                        disabled={requestingTeam === (team._id || team.id) || joinedTeams.has(team._id || team.id)}
+                        className={`flex-shrink-0 px-4 py-2 rounded-lg font-medium text-sm transition flex items-center gap-1 whitespace-nowrap ${
+                          joinedTeams.has(team._id || team.id)
+                            ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300'
+                            : pendingRequests.has(team._id || team.id)
+                            ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300'
+                            : 'bg-blue-100 hover:bg-blue-200 text-blue-700 dark:bg-blue-900 dark:hover:bg-blue-800 dark:text-blue-300'
+                        }`}
+                      >
+                        {joinedTeams.has(team._id || team.id) ? (
+                          <>✓ Joined</>
+                        ) : pendingRequests.has(team._id || team.id) ? (
+                          <>⏳ Pending</>
+                        ) : requestingTeam === (team._id || team.id) ? (
+                          <>Requesting...</>
+                        ) : (
+                          <>
+                            <UserPlus className="w-4 h-4" />
+                            Join Team
+                          </>
+                        )}
+                      </button>
                     )}
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {profile?.teams && profile.teams.length === 0 && (
+            <div className="card">
+              <div className="p-6 text-center">
+                <Users className="w-12 h-12 text-gray-400 dark:text-gray-600 mx-auto mb-3" />
+                <p className="text-gray-600 dark:text-gray-400">This user is not part of any teams yet.</p>
               </div>
             </div>
           )}
@@ -230,7 +338,7 @@ export default function PublicProfile() {
                 <div className="flex-1">
                   <p className="text-sm font-medium text-gray-600 dark:text-gray-400">Member Since</p>
                   <p className="text-base text-gray-900 dark:text-white">
-                    {new Date(profile?.joinedDate).toLocaleDateString()}
+                    {profile?.createdAt ? new Date(profile.createdAt).toLocaleDateString() : 'Unknown'}
                   </p>
                 </div>
               </div>
@@ -240,19 +348,34 @@ export default function PublicProfile() {
 
         {/* Right Column - Additional Info */}
         <div className="space-y-6">
-          {/* Connection Status */}
+          {/* Status Card */}
           <div className="card">
             <div className="border-b border-gray-200 px-6 py-4 dark:border-gray-700">
-              <h3 className="font-bold text-gray-900 dark:text-white">Connection</h3>
+              <h3 className="font-bold text-gray-900 dark:text-white">Visit Status</h3>
             </div>
             <div className="p-6">
               <div className="text-center">
-                <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-                  {currentUser ? 'You are connected' : 'Sign in to collaborate'}
-                </p>
-                <button className="w-full px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium transition">
-                  {currentUser ? 'Send Invite' : 'Sign In'}
-                </button>
+                {currentUser ? (
+                  <>
+                    <p className="text-sm text-green-600 dark:text-green-400 font-medium mb-2">✓ Signed In</p>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                      You can request to join their teams.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
+                      Sign in to interact with this profile and request joining their teams.
+                    </p>
+                    <button 
+                      onClick={() => navigate('/login')}
+                      className="w-full px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-medium transition flex items-center justify-center gap-2"
+                    >
+                      <LogIn className="w-4 h-4" />
+                      Sign In Now
+                    </button>
+                  </>
+                )}
               </div>
             </div>
           </div>
@@ -263,26 +386,33 @@ export default function PublicProfile() {
               <h3 className="font-bold text-gray-900 dark:text-white">Share</h3>
             </div>
             <div className="p-6 space-y-3">
-              <button className="w-full px-4 py-2 rounded-lg bg-blue-50 hover:bg-blue-100 dark:bg-blue-900 dark:hover:bg-blue-800 text-blue-700 dark:text-blue-300 font-medium text-sm transition flex items-center justify-center gap-2">
+              <button 
+                onClick={copyProfileLink}
+                className="w-full px-4 py-2 rounded-lg bg-blue-50 hover:bg-blue-100 dark:bg-blue-900 dark:hover:bg-blue-800 text-blue-700 dark:text-blue-300 font-medium text-sm transition flex items-center justify-center gap-2"
+              >
                 <Copy className="w-4 h-4" />
-                Copy Link
+                {copiedLink ? 'Link Copied!' : 'Copy Profile Link'}
               </button>
-              <button className="w-full px-4 py-2 rounded-lg bg-purple-50 hover:bg-purple-100 dark:bg-purple-900 dark:hover:bg-purple-800 text-purple-700 dark:text-purple-300 font-medium text-sm transition">
+              <button 
+                onClick={copyTaskflowId}
+                className="w-full px-4 py-2 rounded-lg bg-purple-50 hover:bg-purple-100 dark:bg-purple-900 dark:hover:bg-purple-800 text-purple-700 dark:text-purple-300 font-medium text-sm transition"
+              >
+                <Copy className="w-4 h-4 inline mr-2" />
                 Share TaskFlow ID
               </button>
             </div>
           </div>
 
-          {/* Badge Info */}
+          {/* Info Card */}
           <div className="card bg-blue-50 dark:bg-blue-900 border border-blue-200 dark:border-blue-800">
             <div className="p-4">
               <p className="text-xs font-semibold text-blue-700 dark:text-blue-300 uppercase tracking-wider mb-2">
-                💡 Tips
+                💡 About This Page
               </p>
               <ul className="text-xs text-blue-600 dark:text-blue-400 space-y-1">
-                <li>• Connect to view more details</li>
-                <li>• Create projects together</li>
-                <li>• Share teams and tasks</li>
+                <li>• This is a public profile view</li>
+                <li>• You can request to join their teams</li>
+                <li>• Team managers will review your request</li>
               </ul>
             </div>
           </div>
