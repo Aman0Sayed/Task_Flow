@@ -60,6 +60,9 @@ function App() {
           {/* Public profile route */}
           <Route path="/profile/:taskflowId" element={<PublicProfile />} />
 
+          {/* Public Documentation route */}
+          <Route path="/documentation" element={<Documentation />} />
+
           {/* Protected routes */}
           <Route path="/" element={
             <ProtectedRoute>
@@ -76,7 +79,6 @@ function App() {
             <Route path="settings" element={<Settings />} />
             <Route path="profile" element={<Profile />} />
             <Route path="help" element={<Help />} />
-            <Route path="documentation" element={<Documentation />} />
             <Route path="kanban" element={<TeamRequiredRoute><KanbanBoard /></TeamRequiredRoute>} />
             <Route path="*" element={<NotFound />} />
           </Route>
