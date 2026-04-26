@@ -31,9 +31,9 @@ export default function UnderConstructionModal() {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm">
-      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-2xl w-full mx-4 overflow-hidden animate-in zoom-in-50 duration-300">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl shadow-2xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto animate-in zoom-in-50 duration-300 flex flex-col">
         {/* Header with gradient */}
-        <div className="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 px-6 py-12 sm:px-8 sm:py-16">
+        <div className="bg-gradient-to-r from-blue-600 via-purple-600 to-pink-600 px-6 py-6 sm:px-8 sm:py-8 shrink-0">
           <div className="flex items-center justify-center gap-3 mb-4">
             <Zap className="w-10 h-10 text-white" />
             <h2 className="text-3xl sm:text-4xl font-bold text-white">TaskFlow</h2>
@@ -44,9 +44,9 @@ export default function UnderConstructionModal() {
         </div>
 
         {/* Content */}
-        <div className="px-6 py-8 sm:px-8 sm:py-10">
+        <div className="px-6 py-4 sm:px-8 sm:py-6 overflow-y-auto">
           {/* Main description */}
-          <div className="mb-8">
+          <div className="mb-4 text-sm sm:text-base">
             <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
               Welcome to TaskFlow
             </h3>
@@ -61,7 +61,7 @@ export default function UnderConstructionModal() {
           </div>
 
           {/* Key features */}
-          <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-lg p-6 mb-8 border border-blue-200 dark:border-blue-800">
+          <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-lg p-4 mb-4 border border-blue-200 dark:border-blue-800">
             <p className="text-xs font-semibold text-gray-700 dark:text-gray-300 mb-4 uppercase tracking-wider">
               ✨ Key Features
             </p>
@@ -94,7 +94,7 @@ export default function UnderConstructionModal() {
           </div>
 
           {/* Quote/tagline */}
-          <div className="text-center mb-8">
+          <div className="text-center mb-0 sm:mb-2">
             <p className="text-gray-700 dark:text-gray-300 italic text-base">
               "Simplify project management. Empower your team. Deliver results."
             </p>
@@ -102,7 +102,7 @@ export default function UnderConstructionModal() {
         </div>
 
         {/* Footer action */}
-        <div className="bg-gray-50 dark:bg-gray-800 px-6 py-4 sm:px-8 border-t border-gray-200 dark:border-gray-700">
+        <div className="bg-gray-50 dark:bg-gray-800 px-6 py-4 sm:px-8 border-t border-gray-200 dark:border-gray-700 shrink-0">
           <div className="flex flex-col sm:flex-row gap-3">
             <button
               onClick={handleGetStarted}
