@@ -561,34 +561,12 @@ export default function Tasks() {
                           <div className="h-6 w-6 rounded-full bg-primary-500" />
                         </div>
                         <div className="ml-3">
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm">{task.assignee.name}</p>
-                            {canAssignTasks && (
-                              <button
-                                type="button"
-                                onClick={() => openAddAssigneeModal(task)}
-                                className="inline-flex h-5 w-5 items-center justify-center rounded border border-gray-300 bg-white text-xs font-semibold text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
-                                title="Add another assignee"
-                              >
-                                +
-                              </button>
-                            )}
-                          </div>
+                          <p className="text-sm">{task.assignee.name}</p>
                         </div>
                       </div>
                     ) : (
                       <div className="flex items-center gap-2">
                         <span className="text-sm text-gray-500 dark:text-gray-400">Unassigned</span>
-                        {canAssignTasks && (
-                          <button
-                            type="button"
-                            onClick={() => openAssignModal(task)}
-                            className="rounded-md border border-gray-300 bg-white px-2 py-1 text-xs font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
-                            title="Assign this task to a team member"
-                          >
-                            Assign
-                          </button>
-                        )}
                       </div>
                     )}
                   </td>

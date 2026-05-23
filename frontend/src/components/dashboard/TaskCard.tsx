@@ -18,16 +18,18 @@ export default function TaskCard({ task, showAssignButton, onAssignClick, showAd
   const hasValidDueDate = dueDate && !Number.isNaN(dueDate.getTime());
 
   return (
-    <div className="card hover:shadow-md dark:hover:shadow-none transition-shadow">
+    <Link 
+      to={`/tasks/${task._id || task.id}`}
+      className="card hover:shadow-md dark:hover:shadow-none transition-shadow block"
+      draggable={false}
+    >
       <div className="p-4">
         <div className="flex items-start justify-between">
-          <Link 
-            to={`/tasks/${task._id || task.id}`}
-            className="font-medium hover:text-primary-600 dark:hover:text-primary-400"
-            draggable={false}
+          <div 
+            className="font-medium hover:text-primary-600 dark:hover:text-primary-400 flex-1"
           >
             {task.title}
-          </Link>
+          </div>
           
           <div className="flex items-center space-x-2">
             <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${getStatusColor(task.status)}`}>
@@ -51,40 +53,12 @@ export default function TaskCard({ task, showAssignButton, onAssignClick, showAd
                 <span className="text-xs font-medium bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300 px-2 py-0.5 rounded">
                   Assigned
                 </span>
-                {showAddAssigneeButton && typeof onAddAssigneeClick === 'function' && (
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      onAddAssigneeClick(task);
-                    }}
-                    className="inline-flex h-5 w-5 items-center justify-center rounded border border-gray-300 bg-white text-xs font-semibold text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
-                    title="Add another assignee"
-                  >
-                    +
-                  </button>
-                )}
               </div>
             ) : (
               <div className="flex items-center gap-2">
                 <span className="text-xs text-gray-500 dark:text-gray-400">
                   Unassigned
                 </span>
-                {showAssignButton && typeof onAssignClick === 'function' && (
-                  <button
-                    type="button"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      onAssignClick(task);
-                    }}
-                    className="rounded-md border border-gray-300 bg-white px-2 py-1 text-[11px] font-medium text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-200 dark:hover:bg-gray-800"
-                    title="Assign this task to a team member"
-                  >
-                    Assign
-                  </button>
-                )}
               </div>
             )}
           </div>
@@ -115,6 +89,6 @@ export default function TaskCard({ task, showAssignButton, onAssignClick, showAd
           </div>
         </div>
       </div>
-    </div>
+    </Link>
   );
 }

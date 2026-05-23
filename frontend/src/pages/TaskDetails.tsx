@@ -147,10 +147,17 @@ export default function TaskDetails() {
       .filter(Boolean) as Array<{ id: string; name: string; email?: string; avatar?: string }>;
 
     const unique = new Map<string, { id: string; name: string; email?: string; avatar?: string }>();
-    for (const member of normalized) unique.set(member.id.toString(), member);
+    const currentUserId = getId(currentUser as any);
+    for (const member of normalized) {
+      // Exclude the current user (manager) from the assignable list
+      if (currentUserId && member.id.toString() === currentUserId.toString()) {
+        continue;
+      }
+      unique.set(member.id.toString(), member);
+    }
 
     return Array.from(unique.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [projects, teams, users, task]);
+  }, [projects, teams, users, task, currentUser]);
 
   const fetchTask = useCallback(async () => {
     if (!id) return;
